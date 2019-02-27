@@ -1,4 +1,4 @@
-# Stars-Eating-Planets 2019-02-27
+# Stars-Eating-Planets
 
 Master thesis project code for John Wimarsson @LundObservatory
 
