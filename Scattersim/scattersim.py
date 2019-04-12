@@ -1,13 +1,20 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Created on Tue Mar 26 13:22:07 2019
 
 @author: jooehn
+
+Script that generates new velocities for two planets that undergo scattering.
+
+The main purpose of this code is to restrict the parameter space for which
+a planet-host star collision becomes more probable. We have included two major
+simplifications, as the contributions from the host star are neglected and 
+one of the orbits are kept completely circular, which means that the results
+should be analysed with this in mind.
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
+import datetime
 from matplotlib.patches import Arc
 from matplotlib.ticker import MaxNLocator
 
@@ -20,7 +27,6 @@ plt.rcParams['axes.labelsize'] = 18
 plt.rcParams['mathtext.fontset'] = 'cm'
 
 class Scatter:
-
     def __init__(self,p1data,p2data,M_star,theta=0):
     
         self.M_s    = M_star
@@ -34,19 +40,20 @@ class Scatter:
         
         self.pdata = np.vstack([p1data,p2data])
         
+        self.dcoll = self.pdata[0,3] + self.pdata[1,3]
+        self.q     = self.pdata[:,2]/M_star
+        
         self.get_phi_isec()
         self.get_r2()
         self.calc_v()
         self.calc_rhill()
         
     def calc_rhill(self):
-        
         a,e,m,_ = self.pdata.T
         
         self.rhill = a*(1-e)*(m/(3*self.M_s))**(1/3)
         
     def get_phi_isec(self):
-        
         """Obtains the angle of intersection of the orbits given the planet data"""
         
         #As we have assumed that one of the orbits are circular, we only need to
@@ -63,7 +70,6 @@ class Scatter:
         self.phic[1] += -phic+self.theta,-phic
     
     def get_r2(self):
-        
         """Obtains the distance from the centre of mass at the points of intersection
         between two orbits. One of them must have zero eccentricity."""
         
@@ -75,7 +81,6 @@ class Scatter:
         self.rc = (a2*(1-e2**2))/(1+e2*np.cos(self.phic[0,1]))
         
     def calc_v(self):
-        
         """Computes the velocity vectors of the two planets in our system"""
         
         a,e,m,_ = self.pdata.T
@@ -99,7 +104,7 @@ class Scatter:
         self.v2[0]  += vrc1[1],vtc1[1]
         self.v2[1]  += vrc2[1],vtc2[1]
         
-        self.vrel   = self.v1-self.v2 
+        self.vrel   = self.v1 - self.v2
         self.vcm    = (m[0]*self.v1+m[1]*self.v2)/(m.sum())
         
         self.vb1    = self.v1 - self.vcm
@@ -110,13 +115,16 @@ class Scatter:
         v1normsq = self.v1[0,0]**2+self.v1[0,1]**2
         v2normsq = self.v2[0,0]**2+self.v2[0,1]**2
         
-        E1 = 0.5*m[0]*v1normsq - self.G*m[0]*self.M_s/self.rc
-        E2 = 0.5*m[1]*v2normsq - self.G*m[1]*self.M_s/self.rc
+        self.L1 = m1*self.v1[0,1]*self.rc
+        self.L2 = m2*self.v2[0,1]*self.rc
         
-        self.E = E1+E2
+        self.E1 = 0.5*m[0]*v1normsq - self.G*m[0]*self.M_s/self.rc
+        self.E2 = 0.5*m[1]*v2normsq - self.G*m[1]*self.M_s/self.rc
         
-    def get_defang(self,b):
+        self.L = self.L1+self.L2
+        self.E = self.E1+self.E2
         
+    def get_defang(self,b):        
         """Finds the deflection angle given one or a set of impact parameter
         values"""
         
@@ -126,10 +134,7 @@ class Scatter:
         
         psi = np.arctan((b*vnormsq)/(self.G*(m1+m2)))
         
-        if np.size(psi)==1:
-            self.defang = np.pi - 2*psi
-        else:
-            self.defang = np.pi - 2*psi
+        self.defang = (np.pi - 2*psi)
         
         #Furthermore, knowing b anv vrel, we can obtain the distance at closest
         #approach between the planet
@@ -143,7 +148,6 @@ class Scatter:
         self.dmin = (b**2*vnormsq**2)/(self.G*(m1+m2)*(1+e))
         
     def scatter(self,N=1,b=None):
-        
         """Performs the scattering between the two planets in our system and
         computes the new velocities."""
         
@@ -156,24 +160,21 @@ class Scatter:
         self.b = b
         
         #We first calculate the new velocities w.r.t. the centre of mass
-        #The angle of rotation for planet two will be the opposite sign
-        #of the first planet's rotation angle
         
         mrot1 = np.array([[np.cos(self.defang),-np.sin(self.defang)],\
                          [np.sin(self.defang),np.cos(self.defang)]]).T
         
-        mrot2 = np.array([[np.cos(self.defang),np.sin(self.defang)],\
-                         [-np.sin(self.defang),np.cos(self.defang)]]).T
+        mrot2 = np.array([[np.cos(self.defang),-np.sin(self.defang)],\
+                         [np.sin(self.defang),np.cos(self.defang)]]).T
         
-    
         self.vb1n = np.zeros((np.size(b),2,2))
         self.vb2n = np.zeros((np.size(b),2,2))
+          
+        self.vb1n[:,0] = np.matmul(mrot1,self.vb1[0])
+        self.vb1n[:,1] = np.matmul(mrot1,self.vb1[1])
         
-        self.vb1n[:,0] = -np.matmul(mrot1,self.vb1[0])
-        self.vb1n[:,1] = -np.matmul(mrot1,self.vb1[1])
-        
-        self.vb2n[:,0] = -np.matmul(mrot2,self.vb2[0])
-        self.vb2n[:,1] = -np.matmul(mrot2,self.vb2[1])
+        self.vb2n[:,0] = np.matmul(mrot2,self.vb2[0])
+        self.vb2n[:,1] = np.matmul(mrot2,self.vb2[1])
         
         #We can then easily obtain the new velocities for each planet
         
@@ -198,12 +199,24 @@ class Scatter:
         self.et1 = np.sqrt(1+(2*E1*L1**2)/(self.G**2*m1**3*self.M_s**2))
         self.et2 = np.sqrt(1+(2*E2*L2**2)/(self.G**2*m2**3*self.M_s**2))
         
-        #We check if energy is conserved
+        #We check if energy and angular momentum is conserved
         
-        self.dE = ((E1+E2)-self.E)/self.E
+        self.L1n = L1
+        self.L2n = L2
+        self.E1n = E1
+        self.E2n = E2
+        
+        self.Ln = L1+L2
+        self.En = E1+E2
+        
+        self.dL = self.L-self.Ln
+        self.dE = (self.E-self.En)/self.E
+        
+        if not np.allclose(self.dL,0) & np.allclose(self.dE,0):
+            
+            print('dE or dL is not conserved')
         
     def plot_orbit(self):
-        
         """Plots the circular and eccentric orbits and marks the point of crossing."""
         
         a1, e1, m1, _ = self.pdata[0]
@@ -252,12 +265,14 @@ class Scatter:
         
         ax.legend(prop={'size':13})
         
-    def plot_vectri(self,planet=1):
+        self.add_ptable(ax)
+        self.add_date(fig)
         
+    def plot_vectri(self,planet=1):
         """Plots the vector triangle for a given planet after performing a 
         scattering with impact parameter b."""
         
-        fig, ax = plt.subplots(figsize=(10,10))
+        fig, ax = plt.subplots(figsize=(10,8))
         
         #We extract the information we need
         
@@ -271,7 +286,7 @@ class Scatter:
             vcm = self.vcm[idx]
             vn  = self.v1n[0,idx]
             
-            pcol = 'tab:green'
+            pcol = 'b'
             
         elif planet == 2:
 
@@ -281,7 +296,7 @@ class Scatter:
             vcm = self.vcm[idx]
             vn  = self.v2n[0,idx]
         
-            pcol = 'tab:orange'
+            pcol = 'r'
         
         #We then compute relevant values such as vector magnitudes
         
@@ -296,27 +311,28 @@ class Scatter:
         yc = vbnorm*np.sin(ang)+vcm[0]
         
         #Plots vb1
-        vbp, = ax.plot([vb[1],0],[vb[0],0],'--b',lw=1,\
+        vbp, = ax.plot([-vb[1],0],[-vb[0],0],ls='--',color='g',lw=1.5,\
                        label='$v_{b,'+'{}'.format(planet)+'}$')
         self.add_arrow(vbp,direction='right')
         #Plots v
-        vp, = ax.plot([vb[1],v[1]-vb[1]],[vb[0],v[0]-vb[0]],'b-',lw=1,\
+        vp, = ax.plot([-vb[1],vcm[1]],[-vb[0],vcm[0]],ls='-',color='g',lw=1.5,\
                       label='$v_'+'{}'.format(planet)+'}$')
+        
         self.add_arrow(vp)
         #Plots vcm
-        vcmp, = ax.plot([0,vcm[1]],[0,vcm[0]],'-k',lw=1,\
+        vcmp, = ax.plot([0,vcm[1]],[0,vcm[0]],'-k',lw=1.5,\
                         label='$v_\mathrm{cm}$')
         self.add_arrow(vcmp)
         #Plots the position of vb in the circle
-        ax.plot([vcm[1],vcm[1]-vb[1]],[vcm[0],vcm[0]-vb[0]],linestyle='--',color='tab:gray',lw=1)
+        ax.plot([vcm[1],vcm[1]+vb[1]],[vcm[0],vcm[0]+vb[0]],linestyle='--',color='tab:gray',lw=1.5)
         #Plots circle of possible vbn values
-        ax.plot(xc,yc,'k-',lw=1)
+        ax.plot(xc,yc,'k-',lw=1.5)
         #Plots vbn
-        vbnp, = ax.plot([vcm[1],vn[1]],[vcm[0],vn[0]],'r--',lw=1,\
+        vbnp, = ax.plot([vcm[1],vn[1]],[vcm[0],vn[0]],color='m',ls='--',lw=1.5,\
                         label=r'$\tilde{v}_'+'{b,'+'{}'.format(planet)+'}$')
         self.add_arrow(vbnp,direction='right')
         #Plots vn
-        vnp, = ax.plot([0,vn[1]],[0,vn[0]],'r-',lw=1,\
+        vnp, = ax.plot([0,vn[1]],[0,vn[0]],color='m',ls='-',lw=1.5,\
                        label=r'$\tilde{v}_'+'{}'.format(planet)+'}$')
         self.add_arrow(vnp,direction='right')
             
@@ -330,60 +346,146 @@ class Scatter:
         
         #Plots a few markers in the figure
         ax.plot(0,0,marker='+',color='tab:gray',ms=12,mew=1.3,label='$\mathrm{Centre\ of\ mass}$')
-        ax.plot(vb[1],vb[0],marker='o',color=pcol,ms=8,label='$m_{}$'.format(planet))
+        ax.plot(-vb[1],-vb[0],marker='o',color=pcol,ms=8,label='$m_{}$'.format(planet))
         ax.plot(vcm[1],vcm[0],'ko',ms=2)
         
         #Finally, we adjust the axes, add labels and a title
         ax.set_xlabel('$v_t\ \mathrm{[AU\ yr}^{-1}]$')
         ax.set_ylabel('$v_r\ \mathrm{[AU\ yr}^{-1}]$')
-        ax.set_title('$\mathrm{Vector\ triangle\ for\ a\ scattering\ with\ }b =' + '{0:.0f}'\
-                     .format(self.b/self.rjtoau)+'\ \mathrm{R}_J$')
+#        ax.set_title('$\mathrm{Vector\ triangle\ for\ a\ scattering\ with\ }b =' + '{0:.0f}'\
+#                     .format(self.b/self.rjtoau)+'\ \mathrm{R}_J$')
         
-#        ymax = np.ceil(np.amax(np.absolute([vcm[0]-vb[0],vcm[0]+vb[0]])))+1
+#        vp, = ax.plot([0,vcm[1]-vb[1]],[0,vcm[0]-vb[0]],'b-.',lw=1.5)
         
-#        if ymax < 2:
-#            ymax = 2
+        ymax = np.ceil(np.amax(np.absolute([vcm[0]-vb[0],vcm[0]+vb[0]])))
+        if ymax < 3:
+            ymax = 3
+        
+            ax.set_ylim(-ymax,ymax)
             
-#        ax.set_ylim(-ymax,ymax)
+        ylim = ax.get_ylim()
+        
+        ax.set_ylim(ylim[0],ylim[1]-0.01)
+
+        #We add information regarding the impact parameter
+        xmax = ax.get_xlim()[1]
+        ax.text(xmax+.5,ymax-0.3,'$b =' + '{0:.0f}'.format(self.b/self.rjtoau)+\
+                '\ \mathrm{R}_J$',bbox=dict(facecolor='None', alpha=0.5))
+        
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+
+        # Put a legend to the right of the current axis
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5),prop={'size':12})
         ax.set_aspect('equal')  
         
-        ax.legend(prop={'size':12})
-        plt.tight_layout()
+        self.add_ptable(ax)
+        self.add_date(fig)
         
-    def plot_vels(self):
-        
+    def plot_vels(self,planet):
+        """Plots the velocity vectors and their new components for both planets"""
         fig, ax = plt.subplots(figsize=(8,6))
         
-        v   = self.v1[0]*self.auyrtokms
-        vb  = self.vb1[0]*self.auyrtokms
-        vbn = self.vb1n[0,0]*self.auyrtokms
-        vcm = self.vcm[0]*self.auyrtokms
-        vn  = self.v1n[0,0]*self.auyrtokms
+        idx = 0
+            
+        v1   = self.v1[idx]*self.auyrtokms
+        vb1  = self.vb1[idx]*self.auyrtokms
+        vb1n = self.vb1n[0,idx]*self.auyrtokms
+        vcm = self.vcm[idx]*self.auyrtokms
+        v1n  = self.v1n[0,idx]*self.auyrtokms
+            
+        v2   = self.v2[idx]*self.auyrtokms
+        vb2  = self.vb2[idx]*self.auyrtokms
+        vb2n = self.vb2n[0,idx]*self.auyrtokms
+        v2n  = self.v2n[0,idx]*self.auyrtokms
         
-        vnew, = ax.plot([0,vbn[1]],[0,vbn[0]],'r-',label=r'$\tilde{v}_{b}$')
-        vold, = ax.plot([0,vb[1]],[0,vb[0]],'b-',label=r'$v_{b}$')
+        vbold1, = ax.plot([0,vb1[1]],[0,vb1[0]],'r--',label=r'$v_{b,1}$')
+        vbnew1, = ax.plot([0,vb1n[1]],[0,vb1n[0]],'g--',label=r'$\tilde{v}_{b,1}$')
         
-        self.add_arrow(vnew)
-        self.add_arrow(vold)
+        vold1, = ax.plot([0,v1[1]],[0,v1[0]],'r-',label=r'$v_{1}$')
+        vnew1, = ax.plot([0,v1n[1]],[0,v1n[0]],'g-',label=r'$\tilde{v}_{1}$')
+        
+        vcmo1, = ax.plot([vb1[1],vb1[1]+vcm[1]],[vb1[0],vb1[0]+vcm[0]],'--',color='tab:gray')
+        vcmn1, = ax.plot([vb1n[1],vb1n[1]+vcm[1]],[vb1n[0],vb1n[0]+vcm[0]],'--',color='tab:gray')
+        
+        vbold2, = ax.plot([0,vb2[1]],[0,vb2[0]],'b--',label=r'$v_{b,2}$')
+        vbnew2, = ax.plot([0,vb2n[1]],[0,vb2n[0]],'c--',label=r'$\tilde{v}_{b,2}$')
+        
+        vold2, = ax.plot([0,v2[1]],[0,v2[0]],'b-',label=r'$v_{2}$')
+        vnew2, = ax.plot([0,v2n[1]],[0,v2n[0]],'c-',label=r'$\tilde{v}_{2}$')
+        
+        vcmo2, = ax.plot([vb2[1],vb2[1]+vcm[1]],[vb2[0],vb2[0]+vcm[0]],'--',color='tab:gray')
+        vcmn2, = ax.plot([vb2n[1],vb2n[1]+vcm[1]],[vb2n[0],vb2n[0]+vcm[0]],'--',color='tab:gray')
+        
+        
+        self.add_arrow(vbnew1)
+        self.add_arrow(vbold1)
+        
+        self.add_arrow(vnew1)
+        self.add_arrow(vold1)
+        
+        self.add_arrow(vbnew2)
+        self.add_arrow(vbold2)
         
         ax.set_aspect('equal')
         
+        xmax = np.ceil(np.amax(np.absolute([v1[1],vb1[1],v1n[1],vb1n[1]])))
+        ymax = np.ceil(np.amax(np.absolute([v1[0],vb1[0],v1n[0],vb1n[0]])))
+        
+        maxv =int(np.max([xmax,ymax]))
+        
         ax.set_xlabel('$v_t\ \mathrm{[km\ s}^{-1}]$')
         ax.set_ylabel('$v_r\ \mathrm{[km\ s}^{-1}]$')
+        ax.set_xlim(-maxv,maxv)
+        ax.set_ylim(-maxv,maxv)
+        
+        ax.grid(True)
         
         ax.legend()
         
-    def plot_new_orb(self,bvals):
+    def plot_defang_dmin(self):
+        """Plots the deflection angle as a function of the impact parameter and
+        the minimum distance as a function of the deflection angle"""
+        fig, ax = plt.subplots(1,2,sharey=False,figsize=(14,6))
         
-        """Plots the new orbital elements after """
+        #We use a different colour for the impact parameters for which we get
+        #a collision between the planets
+        
+        col = np.asarray(['k']*np.size(self.b))
+        
+        col[self.dcoll>=self.dmin] = 'r'
+        
+        ax[0].scatter(self.b,np.rad2deg(self.defang),c=col,s=2)
+        
+        ax[0].set_xlabel('$b\ [\mathrm{AU}]$')
+        ax[0].set_ylabel(r'$\delta\ [\degree]$')
+      
+        rmark = ax[0].scatter([],[],c='r',s=3,marker='o',label='$d_{min}\leq r_1+r_2$')
+        kmark = ax[0].scatter([],[],c='k',s=3,marker='o',label='$d_{min}>r_1+r_2$')
+        
+        ax[0].legend(handles=[rmark,kmark],prop={'size':13})
+        
+        #We also plot the minimum distance as a function of the deflection angle
+        
+        ax[1].scatter(np.rad2deg(self.defang),self.dmin/self.rjtoau,c=col,s=2)
+        
+        ax[1].set_ylabel('$d_{min}\ [R_J]$')
+        ax[1].set_xlabel(r'$\delta\ [\degree]$')
+        
+        ax[1].set_xlim(0,360)
+        ax[1].set_ylim(0.5*self.dcoll/self.rjtoau,(self.dmin/self.rjtoau).max())
+        ax[1].set_yscale('log')
+        
+        self.add_ptable(ax[0])
+        self.add_date(fig)
+        
+#        fig.subplots_adjust(left=0.2,bottom=0.2)
+        
+    def plot_new_orb(self,bvals):
+        """Plots the new orbital elements after scattering"""
         
         #We save the combined radius of the planets to set up a check for 
         #physical collisions between the planets
-        
-        r1 = self.pdata[0,3]
-        r2 = self.pdata[1,3]
-        
-        rph = r1+r2
         
         self.scatter(b = bvals)
         
@@ -392,9 +494,9 @@ class Scatter:
         
         col = np.asarray(['k']*np.size(bvals))
         
-        col[rph>=self.dmin] = 'r'
+        col[self.dcoll>=self.dmin] = 'r'
         
-        #Finally we set up the plot 
+        #We then set up the plotting parameters
         
         xmax1 = np.amax(self.at1)+0.1*np.amax(self.at1)
         ymax1 = np.amax(self.et1)+0.1*np.amax(self.et1)
@@ -417,16 +519,15 @@ class Scatter:
             dy1 = 0.5
         if ymax2 > 1:
             dy2 = 0.5
+            
+        #Next, we plot the relevant data
         
         fig, ax = plt.subplots(1,2,sharey=False,figsize=(12,6))
-        
-        fig.suptitle('$\mathrm{New\ orbital\ parameters\ after\ scattering}$',\
-                     y = 0.95)
         
         ax[0].scatter(self.at1,self.et1,c=col,s=1,marker='o')
         ax[1].scatter(self.at2,self.et2,c=col,s=1,marker='o')
             
-        ax[0].set_xlabel(r'$\tilde{a}_1$')
+        ax[0].set_xlabel(r'$\tilde{a}_1\ \mathrm{[AU]}$')
         ax[0].set_ylabel(r'$\tilde{e}_1$')
         if any(abs(xmax1-self.at1)>1):
             ax[0].set_xlim(0,xmax1)
@@ -435,7 +536,7 @@ class Scatter:
         if ymax1 > 0.1:
             ax[0].set_yticks(np.arange(0,np.around(ymax1,1)+dy1,dy1))
         
-        ax[1].set_xlabel(r'$\tilde{a}_2$')
+        ax[1].set_xlabel(r'$\tilde{a}_2\ \mathrm{[AU]}$')
         ax[1].set_ylabel(r'$\tilde{e}_2$')
         if any(abs(xmax2-self.at2)>1):
             ax[1].set_xlim(0,xmax2)
@@ -444,34 +545,42 @@ class Scatter:
         if ymax2 > 0.1:
             ax[1].set_yticks(np.arange(0,np.around(ymax2,1)+dy2,dy2))
         
-        rmark = ax[1].scatter([],[],c='r',s=3,marker='o',label='$d_\mathrm{min}\leq r_1+r_2$')
-        kmark = ax[1].scatter([],[],c='k',s=3,marker='o',label='$d_\mathrm{min}>r_1+r_2$')
+        #Handles for our legend
+        rmark = ax[1].scatter([],[],c='r',s=3,marker='o',label='$d_{min}\leq r_1+r_2$')
+        kmark = ax[1].scatter([],[],c='k',s=3,marker='o',label='$d_{min}>r_1+r_2$')
         
         ax[1].legend(handles=[rmark,kmark],prop={'size':14})
+        
+        self.add_ptable(ax[0])
+        self.add_date(fig)
         
         #We also make a plot with the eccentricities as a function of the 
         #impact parameter b
         
-        fig2, ax2 = plt.subplots(figsize=(8,6))
+        fig2, ax2 = plt.subplots(figsize=(10,6))
         
-        ax2.plot(self.b,self.et1,label='$\mathrm{Planet\ 1}$')
-        ax2.plot(self.b,self.et2,label='$\mathrm{Planet\ 2}$')
+        ax2.plot(self.b,self.et1,color='b',label='$\mathrm{Orbit\ 1}$')
+        ax2.plot(self.b,self.et2,color='r',label='$\mathrm{Orbit\ 2}$')
         
-        bmin = self.b[rph>=self.dmin].min()
-        bmax = self.b[rph>=self.dmin].max()
+        bmin = self.b[self.dcoll>=self.dmin].min()
+        bmax = self.b[self.dcoll>=self.dmin].max()
         
         ax2.set_xlabel('$b\ \mathrm{[AU]}$')
         ax2.set_ylabel(r'$\tilde{e}$')
         
-        ax2.axvspan(bmin,bmax,alpha=0.5,color='tab:grey',label='$d_\mathrm{min}\leq r_1+r_2$')
+        #Adds grey region representing impact between the planets
+        ax2.axvspan(bmin,bmax,alpha=0.5,color='tab:grey',label='$d_{min}\leq r_1+r_2$')
         
-        ax2.legend()
+        ax2.legend(prop={'size': 13})
         
+        box = ax2.get_position()
+        ax2.set_position([box.x0, box.y0, box.width * 0.95, box.height])
         
-    def add_arrow(self,line, position=None, direction='right', size=13, color=None):
+        self.add_ptable(ax2)
+        self.add_date(fig2)
         
+    def add_arrow(self,line, position=None, direction='right', size=14, color=None):
         #Thanks SO
-        
         """Add an arrow to a line.
     
         line:       Line2D object
@@ -511,13 +620,41 @@ class Scatter:
             size=size
         )
         
+    def add_ptable(self,ax,loc='top'):
+        """Adds a table """
+        a, e, _, r = self.pdata.T
+        celldata  = [[a[0],e[0],'{:.0e}'.format(self.q[0]),r[0]/self.rjtoau],\
+                     [a[1],e[1],'{:.0e}'.format(self.q[1]),r[1]/self.rjtoau]]
+        tabcol    = ['$a\ \mathrm{[AU]}$','$e$','$q$','$R\ [R_J]}$']
+        tabrow    = ['$\mathrm{Orbit\ 1}$','$\mathrm{Orbit\ 2}$']
+        
+        table = ax.table(cellText=celldata,colLabels=tabcol,rowLabels=tabrow,\
+                  loc=loc,cellLoc='center')
+        
+        table.set_fontsize(10)
+        
+        table.scale(1, 1.2)
+        
+        yticks = ax.yaxis.get_major_ticks()
+        yticks[-1].label1.set_visible(False)
+        
+    def add_date(self,fig):
+        
+        date = datetime.datetime.now()
+        
+        datestr = '${0}$-${1}$-${2}$'.format(date.day,date.month,date.year)
+        
+        fig.text(0.88,0.95,datestr,bbox=dict(facecolor='None'),fontsize=14)
+        
 #We set up the data for the run
 
 #The data for the two planets
 
+plt.close('all')
+
 rjtoau = 1/2150
 
-a1, a2 = 1, 2
+a1, a2 = 1, 1.1
 e1, e2 = 0, 0.8
 m1, m2 = 1e-3, 1e-3
 r1, r2 = 1*rjtoau, 1*rjtoau
@@ -542,16 +679,20 @@ SC.plot_orbit()
 
 #We then perform a single scattering with an impact parameter b
 
-b = 5*rjtoau
-#b = -0.01
+b = 0.1
+#b = -10*rjtoau
+#b = 0.001
 SC.scatter(b = b)
 #The corresponding vector triangle is given by
 
-#SC.plot_vels()
+#SC.plot_vels(1)
+SC.plot_vectri(1)
 SC.plot_vectri(2)
+#print(np.rad2deg(SC.defang))
 
 #We can also plot the resulting orbital elements after a scatterings with a set
 #of bvals given in an interval
-bmax = 0.05*SC.rc
+bmax = 0.075*SC.rc
 bvals = np.linspace(-bmax,bmax,1000)
 SC.plot_new_orb(bvals)
+SC.plot_defang_dmin()
