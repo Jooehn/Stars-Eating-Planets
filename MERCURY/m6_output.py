@@ -208,7 +208,7 @@ class m6_analysis:
             self.M = 1
             self.N = len(m6data[0])
         
-            self.fin_phases = np.zeros((self.M,self.N,8))
+            self.fin_phases = np.zeros((self.K,self.N,8))
         
         self.__get_names()
         self.__get_fin_phases()
@@ -276,8 +276,14 @@ class m6_analysis:
         if self.M == 1:
         
             for i in range(self.K):
+
+                if len(self._dlist) == 0:
+                    
+                    for j in range(self.N):
+                    
+                        self.fin_phases[i][j] = self.simdata[i][j][-1]
                 
-                if i in self._dlist[:,0].astype(int):
+                elif i in self._dlist[:,0].astype(int):
                     
                     for j in range(self.N):
                         
@@ -365,16 +371,14 @@ class m6_analysis:
         avals[tmask] = 0
         msize[tmask] = 0
         
-        yvals    = np.zeros((self.K,self.N))
+        yvals    = np.zeros((self.N,self.K))
         yvals[:] = np.arange(1,self.K+1,1)
         
         fig, ax = plt.subplots(figsize=(self.N,8))
         
-        alphavals = np.around((mvals / mvals[0])[:,0],1)
+        clist = ['m','olive','g','r','orange']
         
-        clist = ['m','olive','g','r','orange','purple','cyan','blue','grey']
-        
-        for i in range(self.K):
+        for i in range(self.N):
             
             peri = avals[:,i]*(1-evals[:,i])
             apo  = avals[:,i]*(1+evals[:,i])
@@ -393,8 +397,8 @@ class m6_analysis:
         
         ax.set_yticks(np.arange(1,self.K+1))
         ax.set_xscale('log')
-        ax.set_title('$\mathrm{Mass\ boosted\ Solar\ System\ evolved\ for\ 0.1\ Myr}$')
-        ax.set_ylabel(r'$\alpha$')
+        ax.set_title('$\mathrm{3J+2E\ runs\ evolved\ for\ 0.1\ Myr}$')
+        ax.set_ylabel(r'$\mathrm{Run\ index}$')
         ax.set_xlabel('$a\ \mathrm{[AU]}$')
         ax.set_xlim(0.2,200)
         ax.set_ylim(0,self.K+1)
@@ -407,9 +411,7 @@ class m6_analysis:
         
         labels = labels
         
-        for j in range(len(alphavals)):
-            
-            labels[j] = '{:.1f}'.format(alphavals[j])
+        labels = list(range(self.K))
             
         ax.set_yticklabels(labels)
         
@@ -465,11 +467,11 @@ class m6_analysis:
         ax.set_ylabel(r'$\mathrm{Time\ elapsed\ before\ ejection\ [Myr]}$')
         
 #m6d, ced = m6_load_data(ce_data=True)
-#m6d = m6_load_data(ce_data=False)
+m6d = m6_load_data(ce_data=False)
 #rrd, ids = find_survivors(m6d)
-#m6a = m6_analysis(m6d)
+m6a = m6_analysis(m6d)
 #m6a.alpha_vs_teject()
-#m6a.Lovis_plot()
+m6a.Lovis_plot()
 #dlist = m6a.detect_death()
 #jup = m6_output('JUPITER.aei')    
 #nep = m6_output('NEPTUNE.aei')
