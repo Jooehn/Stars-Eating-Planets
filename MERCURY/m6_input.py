@@ -109,7 +109,7 @@ def rand_big_input(names,bigdata):
     
     """Function that generates the big.in input file for MERCURY6 given that
     we wish to make a run for an unspecified system. bigdata should be an array
-    containing Nx7 array that contains data in the following form:
+    containing Nx4 array that contains data in the following form:
         
         Columns:
             
@@ -117,10 +117,6 @@ def rand_big_input(names,bigdata):
             2: radius of the object
             3: density of the object
             4: semi-major axis in AU
-            5: eccentricity
-            6: inclination
-            7: argument of perihelion
-            8: longitude of the ascending node
             
     The code generates random properties of the objects from a uniform distribution.
     It yields a new mean anomaly for each body in the system."""
@@ -134,18 +130,16 @@ def rand_big_input(names,bigdata):
         ' epoch (in days) = 0\n',\
         ')---------------------------------------------------------------------\n']
     
-#    ecc = np.random.uniform(0,0.01,size=N)
-    
-#    i = np.random.uniform(0,5,size=N)
-    
-#    n = np.random.uniform(0,360,size=N)
+    ecc = np.random.uniform(0,0.01,size=N)
+    i = np.random.uniform(0,5,size=N)
+    n = np.random.uniform(0,360,size=N)
     M = np.random.uniform(0,360,size=N)
-#    p = np.random.uniform(0,360,size=N)
+    p = np.random.uniform(0,360,size=N)
     
-#    bigdata = np.insert(bigdata,4,ecc,axis=1)
-#    bigdata = np.insert(bigdata,5,i,axis=1)
-#    bigdata = np.insert(bigdata,6,p,axis=1)
-#    bigdata = np.insert(bigdata,7,n,axis=1)
+    bigdata = np.insert(bigdata,4,ecc,axis=1)
+    bigdata = np.insert(bigdata,5,i,axis=1)
+    bigdata = np.insert(bigdata,6,p,axis=1)
+    bigdata = np.insert(bigdata,7,n,axis=1)
     bigdata = np.insert(bigdata,8,M,axis=1)
     
     with open('big.in','w+') as bigfile:
