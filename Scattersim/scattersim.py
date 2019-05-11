@@ -8,7 +8,7 @@ Script that generates new velocities for two planets that undergo scattering.
 The main purpose of this code is to restrict the parameter space for which
 a planet-host star collision becomes more probable. We have included two major
 simplifications, as the contributions from the host star are neglected and 
-one of the orbits are kept completely circular, which means that the results
+that the orbits are coplanar, which means that the results
 should be analysed with this in mind.
 """
 
@@ -20,6 +20,7 @@ import datetime
 from matplotlib.patches import Arc
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from smooth_1d import smooth
 
 plt.rcParams['font.size']= 16
 plt.rcParams['xtick.minor.visible'], plt.rcParams['xtick.top'] = True,True
@@ -46,6 +47,8 @@ class Scatter:
         
         self.pdata = np.vstack([p1data,p2data])
         
+        self.calc_radius()
+        
         self.dcoll = self.pdata[0,3] + self.pdata[1,3]
         self.q     = self.pdata[:,2]/M_star
         
@@ -58,11 +61,39 @@ class Scatter:
         
         self.dcrit = self.dcoll
         
+    def calc_radius(self):
+        """Calculates the radius of a planet with a given mass using the 
+        mass-radius relation from Tremaine & Dong (2012)"""
+        m1,m2 = self.pdata.T[2]*1e3
+        
+        r1 = 10**(0.087+0.141*np.log10(m1)-0.0171*np.log10(m1)**2)*self.rjtoau 
+        r2 = 10**(0.087+0.141*np.log10(m2)-0.0171*np.log10(m2)**2)*self.rjtoau 
+        
+        self.pdata = np.insert(self.pdata,3,[r1,r2],axis=1)
+        
     def calc_rhill(self):
         """Computes the Hill radius at the point where the orbits cross"""
         _,e,m,_ = self.pdata.T
         
         self.Rhill = self.rc[:,None]*(m/(3*self.M_s))**(1/3)
+        
+    def get_orbit_r(self,ang1,ang2=None):
+        
+        if ang2 is None:
+            ang2 = ang1-self.theta
+        
+        a1, e1, m1, _ = self.pdata[0]
+        a2, e2, m2, _ = self.pdata[1]
+        
+        #We work out the semi-latus rectum
+        p1 = a1*(1-e1**2)
+        p2 = a2*(1-e2**2)
+        
+        #This yields the following r for our orbit
+        r1 = p1/(1+e1*np.cos(ang1))
+        r2 = p2/(1+e2*np.cos(ang2))
+        
+        return r1,r2
         
     def cross_check(self):
         """Checks if the two specified orbits will ever cross"""
@@ -322,15 +353,8 @@ class Scatter:
         
         ang = np.linspace(0,2*np.pi,1000)
         
-        #We work out the semi-latus rectum
-        p1 = a1*(1-e1**2)
-        p2 = a2*(1-e2**2)
+        r1, r2 = self.get_orbit_r(ang)
         
-        #This yields the following r for our orbit
-        r1 = p1/(1+e1*np.cos(ang))
-        r2 = p2/(1+e2*np.cos(ang-self.theta))
-        
-        #We then find the corresponding x and y coordinates of the eccentric orbit
         x1 = r1*np.cos(ang)
         y1 = r1*np.sin(ang)
         x2 = r2*np.cos(ang)
@@ -419,6 +443,119 @@ class Scatter:
         #...
         
         #We also update the pdata with our newly found orbital params
+        
+    def test_bvals(self):
+        """Solves the Kepler problem for two orbits, given a varying set of
+        initial phases and computes the minimum distance between the two planets
+        at varying positions."""
+        
+        a1, e1, m1,_ = self.pdata[0]
+        a2, e2, m2,_ = self.pdata[1]
+        
+        #We set the maximum integration time to the max period
+        P1 = np.sqrt(a1**3/(self.M_s+m1))
+        P2 = np.sqrt(a2**3/(self.M_s+m2))
+        T  = np.max([P1,P2])
+        
+        #We set up equally spaced points in time for the entire max period
+        tvals = np.linspace(0,T,250)
+        
+        #We also need an empty container for the minimum separations
+        
+        dlist = []
+        
+        #We set up initial values for the mean anomaly
+        M01 = np.zeros((100))
+        M02 = np.linspace(0,2*np.pi,100)
+        
+        if e1 >= 0.8:
+            E1 = np.full(100,np.pi)
+        else:
+            E1 = M01
+        if e2 >= 0.8:
+            E2 = np.full(100,np.pi)
+        else:
+            E2 = M02
+        
+        #We compute the mean motion
+        n1 = 2*np.pi/P1
+        n2 = 2*np.pi/P2
+        
+        #We also need a figure to plot the positions of the planets on
+        fig, ax = plt.subplots(figsize=(10,6))
+
+        for t in tvals:
+            
+            #For each iteration, we solve the Kepler equation using a simple
+            #Newton method approach
+            
+            M1 = M01+t*n1
+            M2 = M02+t*n2
+            
+            #We solve the Kepler equation for both orbits
+            for i in range(100):
+                
+                E1 = E1-(E1-e1*np.sin(E1)-M1)/(1-e1*np.cos(E1))
+                E2 = E2-(E2-e2*np.sin(E2)-M2)/(1-e2*np.cos(E2))
+            
+            #We then compute the cartesian coordinates for the position of each
+            #of our two planets
+            x1 = a1*(np.cos(E1)-e1)
+            y1 = (a1*np.sqrt(1-e1**2))*np.sin(E1)
+            x2 = a2*(np.cos(E2)-e2)
+            y2 = (a2*np.sqrt(1-e2**2))*np.sin(E2)
+            
+            ax.scatter(x1[0],y1[0],c='b',s=3,label='$\mathrm{Orbit\ 1}$')
+            ax.scatter(x2[0],y2[0],c='r',s=3,label='$\mathrm{Orbit\ 2}$')
+            
+            pos1 = np.array([x1,y1])
+            pos2 = np.array([x2,y2])
+            
+            dlist.append(np.ravel(np.linalg.norm(pos1-pos2,axis=0)))
+            
+        dvals = np.asarray(dlist)
+        
+        dmin = dvals.min(axis=0)
+        
+        bhandle = ax.scatter([],[],c='b',s=3,label='$\mathrm{Orbit\ 1}$')
+        rhandle = ax.scatter([],[],c='r',s=3,label='$\mathrm{Orbit\ 2}$')
+        
+        ax.set_xlabel('$x\ \mathrm{[AU]}$')
+        ax.set_ylabel('$y\ \mathrm{[AU]}$')
+        ax.legend(handles=[bhandle,rhandle],prop={'size':12})
+        ax.set_aspect('equal')
+        self.add_ptable(ax)
+        self.add_date(fig)
+        
+        fig2, ax2 = plt.subplots(figsize=(10,6))
+        ax2.plot(np.rad2deg(M02),dmin/self.rjtoau)
+        ax2.set_xlabel(r'$\phi_2\ [\degree]$')
+        ax2.set_ylabel('$b_{min}\ [R_J]$')
+        ax2.set_yscale('log')
+        
+        ax2n = ax2.twinx()
+        ax2n.plot(np.rad2deg(M02),dmin,color='none')
+        ax2n.set_ylabel('$b_{min}\ \mathrm{[AU]}$')
+        ax2n.set_yscale('log')
+        
+        self.add_ptable(ax2)
+        self.add_date(fig2) 
+        
+        dminsmooth = smooth(dmin)
+        #Next we find the local minima in our dmin array
+        minidx = (np.diff(np.sign(np.diff(dminsmooth))) > 0).nonzero()[0] + 1# local min
+        
+        minmask = dminsmooth<0.1*dminsmooth.max()
+        
+        minidx = np.intersect1d(minidx,np.where(minmask))
+        
+        #We then find new intervals to investigate, looking at an angle range of
+        #phi_min-0.1<phi2<phi+0.1 radians
+        
+        M01fine =  M01[minidx]
+        M02fine =  M02[minidx]
+        
+        return dmin
         
     def plot_vectri(self,planet=1):
         """Plots the vector triangle for a given planet after performing a 
@@ -768,9 +905,9 @@ class Scatter:
         
         ax2.set_xlabel('$b\ [R_J]$')
         ax2.set_ylabel(r'$\tilde{e}$')
-        
+
+#        ax2.set_xlim(-self.b.max()/self.rjtoau,self.b.max()/self.rjtoau)        
         ax2.set_xlim(-0.01/self.rjtoau,0.01/self.rjtoau)
-        ax2.set_xlim(-self.b.max()/self.rjtoau,self.b.max()/self.rjtoau)
         ax2.set_ylim(-0.1,3)
         
         #Adds grey region representing impact between the planets
@@ -853,7 +990,7 @@ class Scatter:
         
         datestr = '${0}$-${1}$-${2}$'.format(date.day,date.month,date.year)
         
-        fig.text(0.88,0.945,datestr,bbox=dict(facecolor='None'),fontsize=14)
+        fig.text(0.91,0.945,datestr,bbox=dict(facecolor='None'),fontsize=14)
         
 #We set up the data for the run
 
@@ -862,14 +999,12 @@ class Scatter:
 plt.close('all')
 
 rjtoau = 1/2150
-
-a1, a2 = 1.0,1.1
+mjtoms = 1/1047.35
+a1, a2 = 1.0,1.0
 e1, e2 = 0.0,0.8
-m1, m2 = 1e-4, 1e-3
-r1, r2 = 1*rjtoau, 1*rjtoau
-
-p1data = np.array([a1,e1,m1,r1])
-p2data = np.array([a2,e2,m2,r2])
+m1, m2 = 1e-3, 1e-4
+p1data = np.array([a1,e1,m1])
+p2data = np.array([a2,e2,m2])
 
 #We set up the class object with orbits corresponding to the given parameters
 #We can also choose to misalign the semi-major axes by an angle theta given
@@ -907,3 +1042,5 @@ bmax = 0.01*SC.rc[0]
 bvals = np.linspace(-bmax,bmax,1000)
 SC.plot_new_orb(bvals,0)
 SC.plot_defang_dmin()
+
+#dmin = SC.test_bvals()
