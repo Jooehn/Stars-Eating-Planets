@@ -32,16 +32,27 @@ r1, r2 = 1*rjtoau, 1*rjtoau
 
 theta = 0
 Rstar = 1/215
+Mstar = 1
 
-#We set up a set of q values which we will investigate
+#We set up a set of q values which we will investigate by setting up the values
+#of our planets for each iteration.
 
-qvals = np.logspace(-4.1,4.1,100)
+earthtosunm = 1/332946
+
+m2vals1 = np.logspace(np.log10(1),np.log10(300),200)
+m1vals1 = (301-m2vals1)
+
+m1vals = np.concatenate([m1vals1,m2vals1])*earthtosunm
+m2vals = np.concatenate([m2vals1,m1vals1])*earthtosunm
+
+qvals = m2vals/m1vals
 
 #We also define a set of bvals for which we will evaluate for each q
 
-#We set up a range of b values
 bmax = 0.01
-bvals = np.linspace(-bmax,bmax,500)
+bvals = np.linspace(-bmax,bmax,1000)
+
+#Set up a few empty containers
 
 bminarr11 = np.zeros(len(qvals))
 bmaxarr11 = np.zeros(len(qvals))
@@ -66,14 +77,12 @@ qmask22   = np.full(len(qvals),False)
 scmask = np.zeros((len(qvals),len(bvals)),dtype=bool)
 zz     = np.zeros((len(qvals),len(bvals)))
 
+fig, ax = plt.subplots(figsize=(10,6))
+
 for i in range(len(qvals)):
     
-    m1 = 1e-3
-    m2 = qvals[i]*m1
-    
-    #We have to ensure that our mass ratio between the most massive planet and
-    #the star is constant throughout the problem
-    Mstar = np.max([m1,m2])*1e3
+    m1 = m1vals[i]
+    m2 = m2vals[i]
     
     p1data = np.array([a1,e1,m1,r1])
     p2data = np.array([a2,e2,m2,r2])    
@@ -97,6 +106,13 @@ for i in range(len(qvals)):
 #    ax.fill(qp[mask12],bvals[mask12]/rjtoau,c='g',alpha=0.75)
 #    ax.fill(qp[mask21],bvals[mask21]/rjtoau,c='g',alpha=0.75)
 #    ax.fill(qp[mask22],bvals[mask22]/rjtoau,c='g',alpha=0.75)
+    
+    qp = np.asarray([qvals[i]]*len(bvals))
+
+    ax.scatter(qp[mask11],bvals[mask11]/rjtoau,c='g',s=3,alpha=0.75)
+    ax.scatter(qp[mask12],bvals[mask12]/rjtoau,c='g',s=3,alpha=0.75)
+    ax.scatter(qp[mask21],bvals[mask21]/rjtoau,c='g',s=3,alpha=0.75)
+    ax.scatter(qp[mask22],bvals[mask22]/rjtoau,c='g',s=3,alpha=0.75)
 
     if any(mask11):
         bminarr11[i] = bvals[mask11].min()
@@ -115,22 +131,23 @@ for i in range(len(qvals)):
         bmaxarr22[i] = bvals[mask22].max()
         qmask22[i]   = True
 
-plt.close('all')
+#plt.close('all')
 
-fig, ax = plt.subplots(figsize=(10,6))    
+#fig, ax = plt.subplots(figsize=(10,6))    
 
 xx,yy = np.meshgrid(qvals,bvals,indexing='ij')
 
 zz[scmask] = 0
 
 #We plot the region where Star-planet collision is possible
-ax.fill_between(qvals,bminarr11/rjtoau,bmaxarr11/rjtoau,where=qmask11,color='g',alpha=0.75)
-ax.fill_between(qvals,bminarr12/rjtoau,bmaxarr12/rjtoau,where=qmask12,color='g',alpha=0.75)
-ax.fill_between(qvals,bminarr21/rjtoau,bmaxarr21/rjtoau,where=qmask21,color='g',alpha=0.75)
-ax.fill_between(qvals,bminarr22/rjtoau,bmaxarr22/rjtoau,where=qmask22,color='g',alpha=0.75)
+#ax.fill_between(qvals,bminarr11/rjtoau,bmaxarr11/rjtoau,where=qmask11,color='g',alpha=0.75)
+#ax.fill_between(qvals,bminarr12/rjtoau,bmaxarr12/rjtoau,where=qmask12,color='g',alpha=0.75)
+#ax.fill_between(qvals,bminarr21/rjtoau,bmaxarr21/rjtoau,where=qmask21,color='g',alpha=0.75)
+#ax.fill_between(qvals,bminarr22/rjtoau,bmaxarr22/rjtoau,where=qmask22,color='g',alpha=0.75)
 
 #We also make a legend handle
-handle = plt.Rectangle((0, 0), 1, 1, fc="g",alpha=0.75,label=r'$e_{i,crit}<\tilde{e}_i<1$')
+#handle = plt.Rectangle((0, 0), 1, 1, fc="g",alpha=0.75,label=r'$e_{i,crit}<\tilde{e}_i<1$')
+handle = ax.scatter([],[],c='g',s=5,label=r'$e_{i,crit}<\tilde{e}_i<1$',alpha=0.75)
 
 ax.set_xlabel('$q_p$')
 ax.set_ylabel('$b\ [R_J]$')
@@ -149,8 +166,8 @@ fig.text(0.908,0.945,datestr,bbox=dict(facecolor='None'),fontsize=14)
 
 #We also add a table
 
-celldata  = [[a1,e1,m1*1e3],[a2,e2,'$q m_1$']]
-tabcol    = ['$a\ \mathrm{[AU]}$','$e$','$m_p\ [M_J]$']
+celldata  = [[a1,e1,'$m_1\in[1,300]$'],[a2,e2,'$301-m_1$']]
+tabcol    = [r'$a\ \mathrm{[AU]}$','$e$','$m_p\ [M_\oplus]$']
 tabrow    = ['$\mathrm{Orbit\ 1}$','$\mathrm{Orbit\ 2}$']
 
 table = ax.table(cellText=celldata,colLabels=tabcol,rowLabels=tabrow,\
