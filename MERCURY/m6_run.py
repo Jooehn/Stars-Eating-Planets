@@ -10,6 +10,7 @@ from subprocess import call
 from subprocess import Popen
 from m6_input import *
 from m6_output import *
+import yagmail
 import pandas as pd
 import os
 import string
@@ -48,7 +49,7 @@ N_all   = len(all_names)
 
 #We choose the number of simulations
 
-N_sim = 50
+N_sim = 1
 
 #We define variables for strings that we want to find in the info.out file
 
@@ -70,8 +71,8 @@ ce_simdata  = []
 #dt we check if any planet has hit the host star. If so we terminate the integration
 #otherwhise, we extend the time by dt.
 
-T   = 1e7
-dt  = 1e5
+T   = 1e4
+dt  = 1e3
 setup_end_time(dt)
 
 #We also remove a file that we want to recreate
@@ -82,9 +83,6 @@ call(['find',os.getcwd(),'-maxdepth','1','-type','f','-name','siminfo.txt','-del
 #We loop through each simulation and gather the information we need from it
 
 for k in range(N_sim):
-    
-    simdata_sys     = []
-    ce_simdata_sys  = []
         
     #The following function randomizes the phase of the big bodies
     rand_big_input(big_names,bigdata)
@@ -178,14 +176,11 @@ for k in range(N_sim):
         
     orb_data, ce_data = m6_read_output(all_names)            
         
-    simdata_sys.append(orb_data)
-    ce_simdata_sys.append(ce_data)
-        
     #Now the run for our system is complete and we have got the information
     #we wanted. We save the simulation data in each 
     
-    simdata.append(simdata_sys)
-    ce_simdata.append(ce_simdata_sys)
+    simdata.append(orb_data)
+    ce_simdata.append(ce_data)
 
 #With the help of pandas, we can create a nicely formatted file with all the info
 #we need to find possible outlier simulations
@@ -215,5 +210,11 @@ else:
 bad_ext = ['*.dmp','*.tmp','*.aei','*.clo','*.out']        
 for j in bad_ext:
     call(['find',os.getcwd(),'-maxdepth','1','-type','f','-name',j,'-delete'])
+    
+#We send an email to indicate that the run is finished
+    
+email = 'nat15jwi@student.lu.se'
+yag = yagmail.SMTP(email,'pass')
+yag.send(email,'MERCURY Run','The run is now finished')
 
 print('My work here is done')
