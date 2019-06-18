@@ -56,7 +56,7 @@ N_sim = 1
 frac_ec_int = 'Fractional energy change due to integrator:'
 frac_am_ch  = 'Fractional angular momentum change:'
 ejected     = 'ejected at'
-star_coll   = 'collided with central body at'
+star_coll   = 'collided with the central body at'
 coll        = 'was hit by'
 
 event_list  = [ejected,star_coll,coll]
@@ -71,9 +71,14 @@ ce_simdata  = []
 #dt we check if any planet has hit the host star. If so we terminate the integration
 #otherwhise, we extend the time by dt.
 
-T   = 1e4
-dt  = 1e3
+T   = 1e7
+dt  = 1e5
 setup_end_time(dt)
+
+#There is also an argument that if True only keeps the run going until we have
+#had at least one host star-planet collision.
+
+until_scol = False
 
 #We also remove a file that we want to recreate
 
@@ -110,20 +115,29 @@ for k in range(N_sim):
         
         call(['./mercury6'])    
         
-        with open('info.out') as info:
-            
-            infolines = info.readlines()
-            
-        for line in infolines:
-            
-            if star_coll in line:
-                break
-            
+        if until_scol:
+        
+            #If we only want to run until we have had at least one S-P collision
+            #we check the output info to catch such an event and breaks the loop
+            #if we find one.
+            with open('info.out') as info:
+                
+                infolines = info.readlines()
+                
+            for line in infolines:
+                
+                if star_coll in line:
+                    break
+            #If we don't find it, we extend the stop time by dt.
+            else:
+                extend_stop_time(dt)
+                t += dt
+                continue
+            break
+        
         else:
             extend_stop_time(dt)
-            t += dt
-            continue
-        break
+            t+=dt
     
     #We then want to go through the info.out file, if one of our keywords
     #appear, we note down the details of the input
