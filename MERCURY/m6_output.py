@@ -17,7 +17,7 @@ plt.rcParams['font.size']= 16
 plt.rcParams['xtick.minor.visible'], plt.rcParams['xtick.top'] = True,True
 plt.rcParams['ytick.minor.visible'], plt.rcParams['ytick.right'] = True,True
 plt.rcParams['xtick.direction'], plt.rcParams['ytick.direction'] = 'in','in'
-plt.rcParams['xtick.labelsize'] = plt.rcParams['ytick.labelsize'] = 14
+plt.rcParams['xtick.labelsize'] = plt.rcParams['ytick.labelsize'] = 12
 plt.rcParams['axes.labelsize'] = 18
 plt.rcParams['mathtext.fontset'] = 'cm'
 
@@ -50,6 +50,10 @@ def m6_save_data(m6data,ce_m6data=[],fname=[]):
         fname = 'm6sim_data.pk1'
         
         ce_fname = 'ce_m6sim_data.pk1'
+        
+    else:
+        
+        ce_fname = 'ce_'+fname
     
     cPickle.dump(m6data,open(fname,'wb'))
     
@@ -80,7 +84,7 @@ def m6_load_data(filename = None,ce_data=False):
         else:
             fnames = ['m6sim_data.pk1']
     else:            
-        if ce_data == True:
+        if ce_data:
                 
             m6filename = filename[0]
             cefilename = filename[1]
@@ -189,8 +193,13 @@ class m6_analysis:
     
     def __init__(self,m6data):
         
-        self.autoer = 149597900/6371
+        """We set up the initial variables of our class. K is the number of 
+        simulations, M is the number of sub-simulations and N is the number of 
+        planets."""
         
+        self.autoer = 149597900/6371
+        self.Rs     = 1/215
+        self.rcrit  = 3e-2
         self.simdata = m6data
         
         if type(m6data[0][0]) is list:
@@ -212,6 +221,17 @@ class m6_analysis:
         
         self.__get_names()
         self.__get_fin_phases()
+        self.__find_bad_runs()
+        self.__get_init_config()
+        
+    def __get_init_config(self):
+        """Finds the initial phases of the planets in the simulation."""
+        
+        self._init_phases = np.zeros((self.N,8)) 
+        
+        for i in range(self.N):
+            
+            self._init_phases[i] = self.simdata[0][i][0]
         
     def __get_names(self):
         
@@ -231,19 +251,15 @@ class m6_analysis:
             
             for line in losses:
                 try:
-                    simstr  = line.split()[0].split('.')
-                    sysid   = simstr[0]
-                    simid   = simstr[1]
+                    simid   = line.split()[0]
                     loss    = line.split()[1]
                     t_loss  = line.split()[-2]
                     if loss in self.names:
                         
                         lossid = self.names.index(loss)
-                        deaths.append(np.array([sysid,simid,lossid,t_loss],dtype=np.float))  
-                        
+                        deaths.append(np.array([simid,lossid,t_loss],dtype=np.float))  
                 except IndexError:
                     continue
-                
         return np.asarray(deaths)
     
     def __detect_col(self):
@@ -253,25 +269,38 @@ class m6_analysis:
         with open('lossinfo.txt','r') as losses:
             
             for line in losses:
-                try:
-                    simstr  = line.split()[0].split('.')
-                    sysid   = simstr[0]
-                    simid   = simstr[1]
-                    loss    = line.split()[1]
-                    t_loss  = line.split()[-2]
-                    if loss in self.names:
-                        
-                        lossid = self.names.index(loss)
-                        cols.append(np.array([sysid,simid,lossid,t_loss],dtype=np.float))  
-                        
-                except IndexError:
-                    continue
+                simid   = line.split()[0]
+                loss    = line.split()[1]
+                t_loss  = line.split()[-2]
+                if loss in self.names:
+                    
+                    lossid = self.names.index(loss)
+                    cols.append(np.array([simid,lossid,t_loss],dtype=np.float))  
                 
         return np.asarray(cols)
     
+    def __detect_scol(self):
+        
+#        self._get_rmin()
+        
+        self.sclist = [[],[]]
+        
+        scstr = 'collided with the central body at'
+        
+        with open('lossinfo.txt','r') as lossfile:
+            for line in lossfile:
+                
+                if scstr in line:
+                    sline = line.split()
+                    self.sclist[0].append(int(sline[0]))
+                    self.sclist[1].append(self.names.index(sline[1]))
+    
+        self.sclist = np.asarray(self.sclist)
     def __get_fin_phases(self):
         
         self._dlist = self.__detect_death()
+        
+        self.__detect_scol()
         
         if self.M == 1:
         
@@ -287,12 +316,12 @@ class m6_analysis:
                     
                     for j in range(self.N):
                         
-                        if j in self._dlist[:,2].astype(int):
+                        if j in self._dlist[:,1].astype(int):
                             
                             d_id = np.where((i in self._dlist[:,0].astype(int)) &\
-                                     (j in self._dlist[:,2].astype(int)))[0][0]
+                                     (j in self._dlist[:,1].astype(int)))[0][0]
                             
-                            finid = find_nearest(self.simdata[i][j][:,0],self._dlist[d_id,3])
+                            finid = find_nearest(self.simdata[i][j][:,0],self._dlist[d_id,2])
                             
                             self.fin_phases[i][j] = self.simdata[i][j][finid]
                 
@@ -335,24 +364,47 @@ class m6_analysis:
                         for k in range(self.N):
                             self.fin_phases[i][j][k] = self.simdata[i][j][k][-1]
                 
-    def __get_rmin(self):
+    def _get_rmin(self):
         
-        for i in range(self.K):
-            
-            rmins = np.zeros((self.N,self.M))
-            
-            for j in range(self.M):
+        if self.M>1:
+        
+            for i in range(self.K):
                 
-                for k in range(self.N):
-                    
-                    a = self.simdata[i][j][k][:,1]
-                    e = self.simdata[i][j][k][:,2]
-                    
-                    rmins[k][j] = min(a*(1-e))
-                    
-            self.rminvals[i][:,0] = np.mean(rmins,axis=1)
-            self.rminvals[i][:,1] = np.std(rmins,axis=1)
+                rmins = np.zeros((self.N,self.M))
                 
+                for j in range(self.M):
+                    
+                    for k in range(self.N):
+                        
+                        a = self.simdata[i][j][k][:,1]
+                        e = self.simdata[i][j][k][:,2]
+                        
+                        rmins[k][j] = min(a*(1-e))
+                        
+                self.rminvals[i][:,0] = np.mean(rmins,axis=1)
+                self.rminvals[i][:,1] = np.std(rmins,axis=1)
+        else:
+            self.rminvals = np.zeros((self.K,self.N))
+            
+            for i in range(self.K):
+                    
+                for j in range(self.N):
+                        
+                    a = self.simdata[i][j][:,1]
+                    e = self.simdata[i][j][:,2]
+                        
+                    self.rminvals[i][j] = min(a*(1-e))
+                    
+    def __find_bad_runs(self):
+        
+        """Detects any runs with an energy loss above the tolerance value."""
+        
+        etol = 1e-2
+        
+        self.siminfo = np.loadtxt('siminfo.txt',skiprows=1)
+        
+        self._badruns = np.where(self.siminfo[:,5]>etol)[0]
+        
     def Lovis_plot(self):
         
         avals = self.fin_phases[:,:,1]
@@ -364,28 +416,49 @@ class m6_analysis:
         
         tend = get_end_time()
         
-        tmask = tvals < tend
+#        tmask = tvals < tend
         
         msize = mvals**(1/3)*500
         
-        avals[tmask] = 0
-        msize[tmask] = 0
+        avals[self.sclist[0],self.sclist[1]] = 0
+#        avals[tmask]       = 0
+#        msize[tmask]       = 0
         
         yvals    = np.zeros((self.N,self.K))
         yvals[:] = np.arange(1,self.K+1,1)
         
-        fig, ax = plt.subplots(figsize=(self.N,8))
+        fig, ax = plt.subplots(figsize=(10,self.K/2))
         
-        clist = ['m','olive','g','r','orange']
+        clist = ['m','b','g','r','orange']
+        
+        #First we plot the original configuration for the planets
+        
+        init_avals = self._init_phases[:,1]
+        
+        ax.scatter(init_avals,[self.K+2]*self.N,c=clist,s=msize)
+        
+        #We also add a dashed line below the initial configuration
+        
+        ax.axhline(self.K+1,linestyle='-',color='k')
+        
+        #Next we plot the surviving planets in every run
         
         for i in range(self.N):
             
-            peri = avals[:,i]*(1-evals[:,i])
-            apo  = avals[:,i]*(1+evals[:,i])
+            nzmask = (avals[:,i]>0)
             
-            errs = np.asarray([abs(peri-avals[:,i]),abs(apo-avals[:,i])])
+            avalsnz = avals[:,i][nzmask]
+            evalsnz = evals[:,i][nzmask]
+            yvalsnz = yvals[i][nzmask]
+            msizenz = msize[:,i][nzmask]
             
-            _,caps,_  = ax.errorbar(avals[:,i],yvals[i],xerr=errs,fmt='None',ecolor='k',\
+            peri = avalsnz*(1-evalsnz)
+            apo  = avalsnz*(1+evalsnz)
+            
+            errs = np.asarray([abs(peri-avalsnz),abs(apo-avalsnz)])
+            
+            #The caps indicate the periastron and apoastron of the orbits
+            _,caps,_  = ax.errorbar(avalsnz,yvalsnz,xerr=errs,fmt='None',ecolor='k',\
                         capsize=4,elinewidth=1.09)
             
             for cap in caps:
@@ -393,15 +466,38 @@ class m6_analysis:
                 cap.set_color(clist[i])
 #                cap.set_markeredgewidth(10)
             
-            ax.scatter(avals[:,i],yvals[i],s=msize[:,i],c=clist[i],label=self.names[i])
+            ax.scatter(avalsnz,yvalsnz,s=msizenz,c=clist[i],label=self.names[i],zorder=2)
+            
+        scxvals = np.logspace(np.log10(1e-3+4e-4),np.log10(self.Rs-5e-4),5)
+        msizesc = mvals**(1/3)*500    
         
+        #We then plot the planets that have been scattered into the star
+        
+        for j in range(self.K):
+            if (j in self.sclist[0]) & (j not in self._badruns):
+                
+                sysid = self.sclist[0][self.sclist[0] == j]
+                plaid = self.sclist[1][self.sclist[0] == j]
+                
+                scx = scxvals[plaid]
+                
+                scc = [clist[i] for i in plaid]
+        
+                ax.scatter(scx,sysid+1,s=msizesc[j][plaid],c=scc,zorder=2)
+                ax.axhspan((j+1-0.2),(j+1+0.2),alpha=0.3,color='g',zorder=1)
+            elif j in self._badruns:
+                ax.axhspan((j+1-0.2),(j+1+0.2),alpha=0.3,color='k',zorder=1)
+
         ax.set_yticks(np.arange(1,self.K+1))
         ax.set_xscale('log')
-        ax.set_title('$\mathrm{3J+2E\ runs\ evolved\ for\ 0.1\ Myr}$')
+        ax.set_title('$\mathrm{3J+2E\ runs\ evolved\ for\ 10\ Myr}$')
         ax.set_ylabel(r'$\mathrm{Run\ index}$')
         ax.set_xlabel('$a\ \mathrm{[AU]}$')
-        ax.set_xlim(0.2,200)
-        ax.set_ylim(0,self.K+1)
+        ax.set_xlim(1e-3,1e4)
+        ax.set_ylim(0,self.K+3)
+        ax.tick_params(axis='y',which='minor',left=False,right=False)
+        ax.axvline(5e-3,linestyle='--',color='k',label=r'$R_\odot$')
+        ax.axvline(3e-2,linestyle='--',color='tab:gray',label=r'$r_{crit}$')
         
 #        ax.legend()
         
@@ -465,13 +561,3 @@ class m6_analysis:
         ax.set_title('$\mathrm{Duration\ of\ stability\ for\ mass\ boosted\ Solar\ System}$')
         ax.set_xlabel(r'$\alpha$')
         ax.set_ylabel(r'$\mathrm{Time\ elapsed\ before\ ejection\ [Myr]}$')
-        
-#m6d, ced = m6_load_data(ce_data=True)
-m6d = m6_load_data(ce_data=False)
-#rrd, ids = find_survivors(m6d)
-m6a = m6_analysis(m6d)
-#m6a.alpha_vs_teject()
-m6a.Lovis_plot()
-#dlist = m6a.detect_death()
-#jup = m6_output('JUPITER.aei')    
-#nep = m6_output('NEPTUNE.aei')

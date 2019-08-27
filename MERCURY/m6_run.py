@@ -49,7 +49,7 @@ N_all   = len(all_names)
 
 #We choose the number of simulations
 
-N_sim = 1
+N_sim = 50
 
 #We define variables for strings that we want to find in the info.out file
 
@@ -228,7 +228,7 @@ for j in bad_ext:
 #We send an email to indicate that the run is finished
     
 email = 'nat15jwi@student.lu.se'
-yag = yagmail.SMTP(email,'pass')
+yag = yagmail.SMTP(email,'D3f3nd1m3px4')
 yag.send(email,'MERCURY Run','The run is now finished')
 
 print('My work here is done')
