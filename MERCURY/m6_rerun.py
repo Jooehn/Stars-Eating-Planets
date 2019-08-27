@@ -73,13 +73,12 @@ ce_simdata  = []
 #To make sure we will have the correct param file, we also set up the time
 #in the same manner as the previous simulation.
 
-T_old = get_end_time()
+#T_old = 1000
 T = 1e6
-
-setup_end_time(T_old)
+setup_end_time(T)
 setup_rerun_time(T)
 
-T_end = T_old+T
+T_end = get_end_time()
 
 #We also remove a file that we want to recreate
 

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Created on Tue Apr 23 16:10:22 2019
 
@@ -9,6 +7,7 @@ Created on Tue Apr 23 16:10:22 2019
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime
+import matplotlib as mpl
 from matplotlib import colors
 from scattersim import Scatter
 
@@ -19,12 +18,12 @@ plt.rcParams['xtick.direction'], plt.rcParams['ytick.direction'] = 'in','in'
 plt.rcParams['xtick.labelsize'] = plt.rcParams['ytick.labelsize'] = 14
 plt.rcParams['axes.labelsize'] = 18
 plt.rcParams['mathtext.fontset'] = 'cm'
+plt.rcParams['hatch.linewidth'] = 2
 
 rjtoau = 1/2150
 
-a1, a2 = 1.0,1.1
-e1, e2 = 0.0,0.8
-r1, r2 = 1*rjtoau, 1*rjtoau
+a1, a2 = 30.0,30.1
+e1, e2 = 0.2,0.0
 
 #We set up the class object with orbits corresponding to the given parameters
 #We can also choose to misalign the semi-major axes by an angle theta given
@@ -54,6 +53,9 @@ bvals = np.linspace(-bmax,bmax,1000)
 
 #Set up a few empty containers
 
+devals1 = np.zeros(len(qvals))
+devals2 = np.zeros(len(qvals))
+
 bminarr11 = np.zeros(len(qvals))
 bmaxarr11 = np.zeros(len(qvals))
 
@@ -74,25 +76,26 @@ qmask22   = np.full(len(qvals),False)
 #We then loop through all our q-values and save the points for which the upper
 #and lower points in b for both of our orbital collision points.
 
-scmask = np.zeros((len(qvals),len(bvals)),dtype=bool)
-zz     = np.zeros((len(qvals),len(bvals)))
-
 fig, ax = plt.subplots(figsize=(10,6))
+fig2, ax2 = plt.subplots(figsize=(10,6)) 
 
 for i in range(len(qvals)):
+    
+    #For each mass combination we perform a scattering and plot the result
     
     m1 = m1vals[i]
     m2 = m2vals[i]
     
-    p1data = np.array([a1,e1,m1,r1])
-    p2data = np.array([a2,e2,m2,r2])    
+    p1data = np.array([a1,e1,m1])
+    p2data = np.array([a2,e2,m2])    
     
     SC = Scatter(p1data,p2data,Mstar,Rstar,theta=theta)
     
+    #We perform the scatterings
     SC.scatter(b=bvals)
     
-    #We should include the possibility of scattering the second planet into the 
-    #star as well.
+    #Next we find which planets have critically interacted with the host star
+    #as well as which ones have collided
     
     mask11 = SC.scoll[:,0,0] & (SC.et1[:,0]<1)
     mask12 = SC.scoll[:,0,1] & (SC.et1[:,1]<1)
@@ -100,54 +103,44 @@ for i in range(len(qvals)):
     mask21 = SC.scoll[:,1,0] & (SC.et2[:,0]<1)
     mask22 = SC.scoll[:,1,1] & (SC.et2[:,1]<1)
    
-    scmask[i] = np.any([mask11,mask12,mask21,mask22],axis=0)
+    col1 = np.asarray(['tab:green']*np.size(SC.b))
+    col2 = np.asarray(['tab:green']*np.size(SC.b))
+
+    #We also check for which cases we get a P-P merger
+    col1[SC.dcrit>=SC.dmin] = 'tab:red'
+    col2[SC.dcrit>=SC.dmin] = 'tab:red'
     
-#    ax.fill(qp[mask11],bvals[mask11]/rjtoau,c='g',alpha=0.75)
-#    ax.fill(qp[mask12],bvals[mask12]/rjtoau,c='g',alpha=0.75)
-#    ax.fill(qp[mask21],bvals[mask21]/rjtoau,c='g',alpha=0.75)
-#    ax.fill(qp[mask22],bvals[mask22]/rjtoau,c='g',alpha=0.75)
+    #Further, we check if the total change of the eccentricity is small
+    
+    devals1[i] = abs(SC.et1[0]-e1).sum()
+    devals2[i] = abs(SC.et2[0]-e2).sum()
+    
+#    if np.allclose(abs(SC.et1-e1),0):
+#        devals1 = 1
+#    if np.allclose(abs(SC.et2-e2),0):
+#        devals2 = 1
     
     qp = np.asarray([qvals[i]]*len(bvals))
 
-    ax.scatter(qp[mask11],bvals[mask11]/rjtoau,c='g',s=3,alpha=0.75)
-    ax.scatter(qp[mask12],bvals[mask12]/rjtoau,c='g',s=3,alpha=0.75)
-    ax.scatter(qp[mask21],bvals[mask21]/rjtoau,c='g',s=3,alpha=0.75)
-    ax.scatter(qp[mask22],bvals[mask22]/rjtoau,c='g',s=3,alpha=0.75)
+    ax.scatter(qp[mask11],bvals[mask11]/rjtoau,c=col1[mask11],s=3)
+    ax.scatter(qp[mask12],bvals[mask12]/rjtoau,c=col1[mask12],s=3)
+    ax.scatter(qp[mask12],bvals[mask12]/rjtoau,c=col1[mask11],s=7,alpha=0,hatch='/')
+    ax.scatter(qp[mask21],bvals[mask21]/rjtoau,c=col2[mask21],s=3)
+    ax.scatter(qp[mask22],bvals[mask22]/rjtoau,c=col2[mask22],s=3)
+    ax.scatter(qp[mask21],bvals[mask22]/rjtoau,c=col2[mask22],s=7,alpha=0,hatch='/')
 
-    if any(mask11):
-        bminarr11[i] = bvals[mask11].min()
-        bmaxarr11[i] = bvals[mask11].max()
-        qmask11[i]   = True
-    if any(mask12):
-        bminarr12[i] = bvals[mask12].min()
-        bmaxarr12[i] = bvals[mask12].max()
-        qmask12[i]   = True               
-    if any(mask21):
-        bminarr21[i] = bvals[mask21].min()
-        bmaxarr21[i] = bvals[mask21].max()
-        qmask21[i]   = True
-    if any(mask22):
-        bminarr22[i] = bvals[mask22].min()
-        bmaxarr22[i] = bvals[mask22].max()
-        qmask22[i]   = True
-
-#plt.close('all')
-
-#fig, ax = plt.subplots(figsize=(10,6))    
-
-xx,yy = np.meshgrid(qvals,bvals,indexing='ij')
-
-zz[scmask] = 0
-
-#We plot the region where Star-planet collision is possible
-#ax.fill_between(qvals,bminarr11/rjtoau,bmaxarr11/rjtoau,where=qmask11,color='g',alpha=0.75)
-#ax.fill_between(qvals,bminarr12/rjtoau,bmaxarr12/rjtoau,where=qmask12,color='g',alpha=0.75)
-#ax.fill_between(qvals,bminarr21/rjtoau,bmaxarr21/rjtoau,where=qmask21,color='g',alpha=0.75)
-#ax.fill_between(qvals,bminarr22/rjtoau,bmaxarr22/rjtoau,where=qmask22,color='g',alpha=0.75)
+#    ax2.scatter(qp[mask11],SC.et1[:,0][mask11],c=col1[mask11],s=3,alpha=0.5)
+#    ax2.scatter(qp[mask11],SC.et1[:,0][mask11],c=col1[mask11],s=7,alpha=0,hatch='/')
+#    ax2.scatter(qp[mask12],SC.et1[:,1][mask12],c=col1[mask12],s=3,alpha=0.5)
+#    ax2.scatter(qp[mask21],SC.et2[:,0][mask21],c=col2[mask21],s=3,alpha=0.5)
+#    ax2.scatter(qp[mask21],SC.et2[:,0][mask21],c=col2[mask21],s=7,alpha=0,hatch='/')
+#    ax2.scatter(qp[mask22],SC.et2[:,1][mask22],c=col2[mask22],s=3,alpha=0.5)
 
 #We also make a legend handle
-#handle = plt.Rectangle((0, 0), 1, 1, fc="g",alpha=0.75,label=r'$e_{i,crit}<\tilde{e}_i<1$')
-handle = ax.scatter([],[],c='g',s=5,label=r'$e_{i,crit}<\tilde{e}_i<1$',alpha=0.75)
+ghand = plt.Rectangle((0, 0), 1, 1, fc="tab:green",label=r'$e_{i,crit}<\tilde{e}_i<1$')
+rhand = plt.Rectangle((0, 0), 1, 1, fc="tab:red",label=r'$d_{min}\leq d_{crit}$')
+hhand1 = plt.Rectangle((0, 0), 1, 1, fc="None",ec='k',label='$\mathrm{Orbit\ crossing\ A}$')
+hhand2 = plt.Rectangle((0, 0), 1, 1, fc="None",ec='k',hatch='/',label='$\mathrm{Orbit\ crossing\ B}$')
 
 ax.set_xlabel('$q_p$')
 ax.set_ylabel('$b\ [R_J]$')
@@ -156,6 +149,13 @@ ax.set_xscale('log')
 ax.set_xlim(qvals.min(),qvals.max())
 ax.set_ylim(-bmax/rjtoau,bmax/rjtoau)
 
+ax2.set_xlabel('$q_p$')
+ax2.set_ylabel(r'$\tilde{e_i}$')
+
+ax2.set_xscale('log')
+ax2.set_xlim(qvals.min(),qvals.max())
+ax2.set_ylim(0,1.1)
+
 #We add the current date
 
 date = datetime.datetime.now()
@@ -163,6 +163,7 @@ date = datetime.datetime.now()
 datestr = '${0}$-${1}$-${2}$'.format(date.day,date.month,date.year)
         
 fig.text(0.908,0.945,datestr,bbox=dict(facecolor='None'),fontsize=14)
+fig2.text(0.908,0.945,datestr,bbox=dict(facecolor='None'),fontsize=14)
 
 #We also add a table
 
@@ -180,5 +181,15 @@ table.scale(1, 1.2)
 yticks = ax.yaxis.get_major_ticks()
 yticks[-1].label1.set_visible(False)
 
-ax.legend(handles=[handle],prop={'size':13})
+table2 = ax2.table(cellText=celldata,colLabels=tabcol,rowLabels=tabrow,\
+          loc='top',cellLoc='center')
+
+table2.set_fontsize(10)
+
+table2.scale(1, 1.2)
+
+yticks = ax2.yaxis.get_major_ticks()
+yticks[-1].label1.set_visible(False)
+
+ax.legend(handles=[ghand,rhand,hhand1,hhand2],prop={'size':13})
 #plt.tight_layout()

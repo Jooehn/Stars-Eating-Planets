@@ -1,7 +1,8 @@
+
 """
 Created on Tue Mar 26 13:22:07 2019
 
-@author: jooehn
+@author: John Wimarsson
 
 Script that generates new velocities for two planets that undergo scattering.
 
@@ -13,22 +14,10 @@ should be analysed with this in mind.
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.colors as mplcol
 import matplotlib.cm as cm
-import datetime
-from matplotlib.patches import Arc
-from matplotlib.ticker import MaxNLocator
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+from plotfuncs import *
 from smooth_1d import smooth
-
-plt.rcParams['font.size']= 16
-plt.rcParams['xtick.minor.visible'], plt.rcParams['xtick.top'] = True,True
-plt.rcParams['ytick.minor.visible'], plt.rcParams['ytick.right'] = True,True
-plt.rcParams['xtick.direction'], plt.rcParams['ytick.direction'] = 'in','in'
-plt.rcParams['xtick.labelsize'] = plt.rcParams['ytick.labelsize'] = 14
-plt.rcParams['axes.labelsize'] = 18
-plt.rcParams['mathtext.fontset'] = 'cm'
 
 class Scatter:
     def __init__(self,p1data,p2data,M_star,R_star,theta=0):
@@ -37,9 +26,12 @@ class Scatter:
         self.G      = 4*np.pi**2
         self.theta  = np.deg2rad(theta)
         self.rjtoau = 1/2150
+        self.rstoau = 1/215
+        self.rjtors = self.rjtoau/self.rstoau
         #We use the empirical limit for tidal interaction (Beaugé & Nesvorný, 2012)
         #as our critical radius
         self.rcrit  = 6*R_star
+        self.R_star = R_star
         
         kmtoau = 1/149597900
         kmstoauyr = (3600*24*365.25)*kmtoau 
@@ -66,8 +58,8 @@ class Scatter:
         mass-radius relation from Tremaine & Dong (2012)"""
         m1,m2 = self.pdata.T[2]*1e3
         
-        r1 = 10**(0.087+0.141*np.log10(m1)-0.0171*np.log10(m1)**2)*self.rjtoau 
-        r2 = 10**(0.087+0.141*np.log10(m2)-0.0171*np.log10(m2)**2)*self.rjtoau 
+        r1 = 10**(0.087+0.141*np.log10(m1)-0.171*np.log10(m1)**2)*self.rjtoau 
+        r2 = 10**(0.087+0.141*np.log10(m2)-0.171*np.log10(m2)**2)*self.rjtoau 
         
         self.pdata = np.insert(self.pdata,3,[r1,r2],axis=1)
         
@@ -333,11 +325,11 @@ class Scatter:
         #enough to the star. The limit for tidal interaction has empirically
         #been found to be approximately 0.03 AU (Beaugé & Nesvorný, 2012).
         
-        rp = np.zeros((np.size(b),2,2))
-        rp[:,0] = self.at1*(1-self.et1)
-        rp[:,1] = self.at2*(1-self.et2)
+        self.rmin = np.zeros((np.size(b),2,2))
+        self.rmin[:,0] = self.at1*(1-self.et1)
+        self.rmin[:,1] = self.at2*(1-self.et2)
         
-        self.scoll = rp<self.rcrit
+        self.scoll = self.rmin<self.rcrit
         
         #We can also compute the critical eccentricity for a given semi-major axis
         
@@ -373,7 +365,9 @@ class Scatter:
         ax.plot(x2,y2,'r-',label='$\mathrm{Orbit\ 2}$')
         ax.plot(0,0,marker='+',color='tab:gray',ms=10)
         ax.plot(xc1,yc1,'k+',markersize=7,label='$r_1 = r_2$')
+        ax.text(xc1-0.1,yc1+0.1,'$\mathrm{A}$')
         ax.plot(xc2,yc2,'k+',markersize=7) #Due to symmetry, we get two crossings
+        ax.text(xc2-0.1,yc2-0.2,'$\mathrm{B}$')
         
         ax.set_aspect('equal')
         
@@ -382,14 +376,14 @@ class Scatter:
         
         ax.set_xlim(-xmax,xmax)
         ax.set_ylim(-ymax,ymax)
-        ax.set_yticks(np.arange(-ymax,ymax+1,1))
+#        ax.set_yticks(np.arange(-ymax,ymax+1,1))
         ax.set_xlabel('$x\ \mathrm{[AU]}$')
         ax.set_ylabel('$y\ \mathrm{[AU]}$')
         
         ax.legend(prop={'size':13})
         
         self.add_ptable(ax)
-        self.add_date(fig)
+        add_date(fig)
         
     def detect_coll(self,N):
         
@@ -465,15 +459,15 @@ class Scatter:
         dlist = []
         
         #We set up initial values for the mean anomaly
-        M01 = np.zeros((100))
-        M02 = np.linspace(0,2*np.pi,100)
+        M01 = np.zeros((500))
+        M02 = np.linspace(0,2*np.pi,500)
         
         if e1 >= 0.8:
-            E1 = np.full(100,np.pi)
+            E1 = np.full(500,np.pi)
         else:
             E1 = M01
         if e2 >= 0.8:
-            E2 = np.full(100,np.pi)
+            E2 = np.full(500,np.pi)
         else:
             E2 = M02
         
@@ -525,7 +519,7 @@ class Scatter:
         ax.legend(handles=[bhandle,rhandle],prop={'size':12})
         ax.set_aspect('equal')
         self.add_ptable(ax)
-        self.add_date(fig)
+        add_date(fig)
         
         fig2, ax2 = plt.subplots(figsize=(10,6))
         ax2.plot(np.rad2deg(M02),dmin/self.rjtoau)
@@ -533,29 +527,111 @@ class Scatter:
         ax2.set_ylabel('$b_{min}\ [R_J]$')
         ax2.set_yscale('log')
         
-        ax2n = ax2.twinx()
-        ax2n.plot(np.rad2deg(M02),dmin,color='none')
-        ax2n.set_ylabel('$b_{min}\ \mathrm{[AU]}$')
-        ax2n.set_yscale('log')
+        add_AUax(ax2,self.rjtoau)
         
         self.add_ptable(ax2)
-        self.add_date(fig2) 
+        add_date(fig2,xcoord=0.9075) 
         
-        dminsmooth = smooth(dmin)
         #Next we find the local minima in our dmin array
-        minidx = (np.diff(np.sign(np.diff(dminsmooth))) > 0).nonzero()[0] + 1# local min
+        minidx = (np.diff(np.sign(np.diff(dmin))) > 0).nonzero()[0] + 1# local min
         
-        minmask = dminsmooth<0.1*dminsmooth.max()
+        minmask = dmin<0.1*dmin.max()
         
         minidx = np.intersect1d(minidx,np.where(minmask))
         
         #We then find new intervals to investigate, looking at an angle range of
         #phi_min-0.1<phi2<phi+0.1 radians
         
-        M01fine =  M01[minidx]
-        M02fine =  M02[minidx]
+        M02min =  M02[minidx]
         
-        return dmin
+        M0fr = np.deg2rad(3)
+        
+        M02f1 = np.linspace(M02min[0]-M0fr,M02min[0]+M0fr,500)
+        M02f2 = np.linspace(M02min[1]-M0fr,M02min[1]+M0fr,500)
+        
+        M02fr = np.concatenate([M02f1,M02f2])
+        M01fr = np.zeros(len(M02fr))
+        
+        if e1 >= 0.8:
+            E1f = np.full(len(M02fr),np.pi)
+        else:
+            E1f = M01fr
+        if e2 >= 0.8:
+            E2f = np.full(len(M02fr),np.pi)
+        else:
+            E2f = M02fr
+        
+        dlistf = []
+        
+        tvalsf = np.linspace(0,T,500)
+        
+        for t in tvalsf:
+            
+            #For each iteration, we solve the Kepler equation using a simple
+            #Newton method approach
+            
+            M1f = M01fr+t*n1
+            M2f = M02fr+t*n2
+            
+            #We solve the Kepler equation for both orbits
+            for i in range(100):
+                
+                E1f = E1f-(E1f-e1*np.sin(E1f)-M1f)/(1-e1*np.cos(E1f))
+                E2f = E2f-(E2f-e2*np.sin(E2f)-M2f)/(1-e2*np.cos(E2f))
+            
+            #We then compute the cartesian coordinates for the position of each
+            #of our two planets
+            x1f = a1*(np.cos(E1f)-e1)
+            y1f = (a1*np.sqrt(1-e1**2))*np.sin(E1f)
+            x2f = a2*(np.cos(E2f)-e2)
+            y2f = (a2*np.sqrt(1-e2**2))*np.sin(E2f)
+            
+            pos1f = np.array([x1f,y1f])
+            pos2f = np.array([x2f,y2f])
+            
+            dlistf.append(np.ravel(np.linalg.norm(pos1f-pos2f,axis=0)))
+            
+        dvalsf = np.asarray(dlistf)
+        
+        dminf = dvalsf.min(axis=0)
+            
+        fig3, ax3 = plt.subplots(figsize=(10,6))
+        ax3.scatter(np.rad2deg(M02fr),dminf/self.rjtoau,s=3)
+        ax3.set_xlabel(r'$\phi_2\ [\degree]$')
+        ax3.set_ylabel('$b_{min}\ [R_J]$')
+        ax3.set_yscale('log')
+        
+        #We find the local minima once more and calculate the slopes of the
+        #lines left and right of the minima using a simple polyfit
+        
+        halfidx = int(0.5*len(dminf))
+        
+        minidxf1 = (np.diff(np.sign(np.diff(dminf[:halfidx]))) > 0).nonzero()[0] + 1# local min
+        minidxf2 = (np.diff(np.sign(np.diff(dminf[halfidx:]))) > 0).nonzero()[0] + 1# local min
+        
+        minidxf1 = minidxf1[0]
+        minidxf2 = minidxf2[0]+halfidx
+        
+        dminf1l = dminf[:minidxf1]
+        M02f1l  = M02fr[:minidxf1]
+        dminf1r = dminf[minidxf1:halfidx]
+        M02f1r  = M02fr[minidxf1:halfidx]
+        
+        dminf2l = dminf[halfidx:minidxf2]
+        M02f2l  = M02fr[halfidx:minidxf2]
+        dminf2r = dminf[minidxf2:]
+        M02f2r  = M02fr[minidxf2:]
+        
+        slope = np.zeros(4)
+        
+        slope[0] = np.polyfit(M02f1l,dminf1l,1)[0]
+        slope[1] = np.polyfit(M02f1r,dminf1r,1)[0]
+        slope[2] = np.polyfit(M02f2l,dminf2l,1)[0]
+        slope[3] = np.polyfit(M02f2r,dminf2r,1)[0]
+        
+        print(slope)
+        
+        return dminf
         
     def plot_vectri(self,planet=1):
         """Plots the vector triangle for a given planet after performing a 
@@ -598,16 +674,16 @@ class Scatter:
         #Plots vb1
         vbp, = ax.plot([-vb[1],0],[-vb[0],0],ls='--',color='g',lw=1.5,\
                        label='$v_{b,'+'{}'.format(planet)+'}$')
-        self.add_arrow(vbp,direction='right')
+        add_arrow(vbp,direction='right')
         #Plots v
         vp, = ax.plot([-vb[1],vcm[1]],[-vb[0],vcm[0]],ls='-',color='g',lw=1.5,\
                       label='$v_'+'{}'.format(planet)+'}$')
         
-        self.add_arrow(vp)
+        add_arrow(vp)
         #Plots vcm
         vcmp, = ax.plot([0,vcm[1]],[0,vcm[0]],'-k',lw=1.5,\
                         label='$v_\mathrm{cm}$')
-        self.add_arrow(vcmp)
+        add_arrow(vcmp)
         #Plots the position of vb in the circle
         ax.plot([vcm[1],vcm[1]+vb[1]],[vcm[0],vcm[0]+vb[0]],linestyle='--',color='tab:gray',lw=1.5)
         #Plots circle of possible vbn values
@@ -615,11 +691,11 @@ class Scatter:
         #Plots vbn
         vbnp, = ax.plot([vcm[1],vn[1]],[vcm[0],vn[0]],color='m',ls='--',lw=1.5,\
                         label=r'$\tilde{v}_'+'{b,'+'{}'.format(planet)+'}$')
-        self.add_arrow(vbnp,direction='right')
+        add_arrow(vbnp,direction='right')
         #Plots vn
         vnp, = ax.plot([0,vn[1]],[0,vn[0]],color='m',ls='-',lw=1.5,\
                        label=r'$\tilde{v}_'+'{}'.format(planet)+'}$')
-        self.add_arrow(vnp,direction='right')
+        add_arrow(vnp,direction='right')
             
         #We also plot a vector pointing towards the position of the host star
         
@@ -627,7 +703,7 @@ class Scatter:
         
         hsp, = ax.plot([0,xhs],[0,yhs],'-',color='tab:gray',\
                        label=r'$\hat{r}_{\star}$')
-        self.add_arrow(hsp,position=xhs)
+        add_arrow(hsp,position=xhs)
         
         #Plots a few markers in the figure
         ax.plot(0,0,marker='+',color='tab:gray',ms=12,mew=1.3,label='$\mathrm{Centre\ of\ mass}$')
@@ -654,7 +730,7 @@ class Scatter:
 
         #We add information regarding the impact parameter
         xmax = ax.get_xlim()[1]
-        ax.text(xmax+.5,ymax-0.3,'$b =' + '{0:.0f}'.format(self.b/self.rjtoau)+\
+        ax.text(xmax+.75,ymax-0.3,'$b =' + '{0:.0f}'.format(self.b/self.rjtoau)+\
                 '\ \mathrm{R}_J$',bbox=dict(facecolor='None', alpha=0.5))
         
         box = ax.get_position()
@@ -665,7 +741,7 @@ class Scatter:
         ax.set_aspect('equal')  
         
         self.add_ptable(ax)
-        self.add_date(fig)
+        add_date(fig)
         
     def plot_vels(self,idx):
         """Plots the velocity vectors and their new components for both planets"""
@@ -700,15 +776,14 @@ class Scatter:
         vcmo2, = ax.plot([vb2[1],vb2[1]+vcm[1]],[vb2[0],vb2[0]+vcm[0]],'--',color='tab:gray')
         vcmn2, = ax.plot([vb2n[1],vb2n[1]+vcm[1]],[vb2n[0],vb2n[0]+vcm[0]],'--',color='tab:gray')
         
+        add_arrow(vbnew1)
+        add_arrow(vbold1)
         
-        self.add_arrow(vbnew1)
-        self.add_arrow(vbold1)
+        add_arrow(vnew1)
+        add_arrow(vold1)
         
-        self.add_arrow(vnew1)
-        self.add_arrow(vold1)
-        
-        self.add_arrow(vbnew2)
-        self.add_arrow(vbold2)
+        add_arrow(vbnew2)
+        add_arrow(vbold2)
         
         ax.set_aspect('equal')
         
@@ -763,11 +838,11 @@ class Scatter:
         ax[1].set_xlabel(r'$\delta\ [\degree]$')
         
         ax[1].set_xlim(0,360)
-        ax[1].set_ylim(0.5*self.dcrit/self.rjtoau,(self.dmin/self.rjtoau).max())
+#        ax[1].set_ylim(0.5*self.dcrit/self.rjtoau,(self.dmin/self.rjtoau).max())
         ax[1].set_yscale('log')
         
         self.add_ptable(ax[0])
-        self.add_date(fig)
+        add_date(fig)
         
 #        fig.subplots_adjust(left=0.2,bottom=0.2)
         
@@ -793,11 +868,11 @@ class Scatter:
         
         xmax1 = np.amax(self.at1[:,idx])+0.1*np.amax(self.at1[:,idx])
         ymax1 = np.amax(self.et1[:,idx][self.E2n[:,idx]<0])\
-                +0.1*np.amax(self.et1[:,idx][self.E1n[:,idx]<0])
+                +0.3*np.amax(self.et1[:,idx][self.E1n[:,idx]<0])
         
         xmax2 = np.amax(self.at2[:,idx])+0.1*np.amax(self.at2[:,idx])
         ymax2 = np.amax(self.et2[:,idx][self.E2n[:,idx]<0])\
-                +0.1*np.amax(self.et2[:,idx][self.E2n[:,idx]<0])
+                +0.3*np.amax(self.et2[:,idx][self.E2n[:,idx]<0])
         
         dx1 = 1
         dx2 = 1
@@ -829,7 +904,7 @@ class Scatter:
             ax[0].set_xticks(np.arange(0,int(xmax1)+dx1,dx1))
         ax[0].set_ylim(0,ymax1)
         if ymax1 > 0.1:
-            ax[0].set_yticks(np.arange(0,np.around(ymax1,1)+dy1,dy1))
+            ax[0].set_yticks(np.arange(0,np.around(ymax1,1),dy1))
         
         ax[1].set_xlabel(r'$\tilde{a}_2\ \mathrm{[AU]}$')
         ax[1].set_ylabel(r'$\tilde{e}_2$')
@@ -838,7 +913,7 @@ class Scatter:
             ax[1].set_xticks(np.arange(0,int(xmax2)+dx2,dx2))
         ax[1].set_ylim(0,ymax2)
         if ymax2 > 0.1:
-            ax[1].set_yticks(np.arange(0,np.around(ymax2,1)+dy2,dy2))
+            ax[1].set_yticks(np.arange(0,np.around(ymax2,1),dy2))
         
         #Handles for our legend
         omark = ax[1].scatter([],[],c='r',s=3,marker='o',label='$d_{min}\leq d_{crit}$')
@@ -853,7 +928,7 @@ class Scatter:
         ax[1].legend(handles=hlist,prop={'size':14})
         
         self.add_ptable(ax[0])
-        self.add_date(fig)
+        add_date(fig)
         
         #We also make a plot with the eccentricities as a function of the 
         #impact parameter b
@@ -869,8 +944,12 @@ class Scatter:
         #To do so, we need the range of b for which we will have an interaction
         #between the planets, which are given by bmin and bmax
         
-        bmin = self.b[self.dcrit>=self.dmin].min()
-        bmax = self.b[self.dcrit>=self.dmin].max()
+        if np.any(self.dcrit>=self.dmin):
+            bmin = self.b[self.dcrit>=self.dmin].min()
+            bmax = self.b[self.dcrit>=self.dmin].max()
+        else:
+            bmin = 0
+            bmax = 0
         
         elim1, = ax2.plot(self.b/self.rjtoau,self.ecrit[:,0,idx],'b--',alpha=0.5,\
                  label=r'$e_{1,crit}$')
@@ -908,7 +987,7 @@ class Scatter:
 
 #        ax2.set_xlim(-self.b.max()/self.rjtoau,self.b.max()/self.rjtoau)        
         ax2.set_xlim(-0.01/self.rjtoau,0.01/self.rjtoau)
-        ax2.set_ylim(-0.1,3)
+        ax2.set_ylim(-0.1,1.1)
         
         #Adds grey region representing impact between the planets
         gzone = ax2.axvspan(bmin/self.rjtoau,bmax/self.rjtoau,alpha=0.75,color='tab:grey',zorder=-1,\
@@ -922,55 +1001,60 @@ class Scatter:
         ax2.legend(handles=hlist,prop={'size': 13},loc='best')
         
         self.add_ptable(ax2)
-        self.add_date(fig2)
+        add_date(fig2)
         
-    def add_arrow(self,line, position=None, direction='right', size=14, color=None):
-        #Thanks SO
-        """Add an arrow to a line.
-    
-        line:       Line2D object
-        position:   x-position of the arrow. If None, mean of xdata is taken
-        direction:  'left' or 'right'
-        size:       size of the arrow in fontsize points
-        color:      if None, line color is taken."""
+        fig3, ax3 = plt.subplots(figsize=(10,6))
         
-        if color is None:
-            color = line.get_color()
+        rmin1, = ax3.plot(self.b/self.rjtoau,self.rmin[:,0,idx]/self.rstoau,\
+                          label='$\mathrm{Orbit\ 1}$',color='b')
+        rmin2, = ax3.plot(self.b/self.rjtoau,self.rmin[:,1,idx]/self.rstoau,\
+                          label='$\mathrm{Orbit\ 2}$',color='r')
         
-        xvals = line.get_xdata()
-        yvals = line.get_ydata()
-    
-        x0,x1 = xvals[0],xvals[-1]
-        y0,y1 = yvals[0],yvals[-1]
+        rcrit = ax3.axhline(self.rcrit/self.rstoau,linestyle='--',label='$r_{crit}$',\
+                             color='tab:gray')
         
-        xdata = np.linspace(x0,x1,100)
-        ydata = np.linspace(y0,y1,100)
-    
-        if position is None:
-            position = xdata.mean()
-        # find closest index
-        if position == x1:
-            start_ind = -2
-        else:
-            start_ind = np.argmin(np.absolute(xdata - position))
-        if direction == 'right':
-            end_ind = start_ind + 1
-        else:
-            end_ind = start_ind - 1
-    
-        line.axes.annotate('',
-            xytext=(xdata[start_ind], ydata[start_ind]),
-            xy=(xdata[end_ind], ydata[end_ind]),
-            arrowprops=dict(arrowstyle="->", color=color),
-            size=size
-        )
+        ax3.axhline(self.R_star/self.rstoau,linestyle='--',label='$R_\star$',\
+                             color='black',alpha=0.8)
+        
+        rcrits = np.asarray([self.rcrit]*len(self.b))/self.rstoau
+        
+        ax3.fill_between(self.b[self.b<=bmin]/self.rjtoau,rcrits[self.b<=bmin]\
+                         ,self.rmin[:,0,idx][self.b<=bmin]/self.rstoau,alpha=0.6,\
+                         where=et1mask[self.b<=bmin],color='g')
+        ax3.fill_between(self.b[self.b>=bmax]/self.rjtoau,rcrits[self.b>=bmax]\
+                         ,self.rmin[:,0,idx][self.b>=bmax]/self.rstoau,alpha=0.6,\
+                         where=et1mask[self.b>=bmax],color='g')
+        #We do the same for the second orbit
+        ax3.fill_between(self.b[self.b<=bmin]/self.rjtoau,rcrits[self.b<=bmin]\
+                         ,self.rmin[:,1,idx][self.b<=bmin]/self.rstoau,alpha=0.6,\
+                         where=et2mask[self.b<=bmin],color='g')
+        ax3.fill_between(self.b[self.b>=bmax]/self.rjtoau,rcrits[self.b>=bmax]\
+                         ,self.rmin[:,1,idx][self.b>=bmax]/self.rstoau,alpha=0.6,\
+                         where=et2mask[self.b>=bmax],color='g')
+        
+        ax3.axvspan(bmin/self.rjtoau,bmax/self.rjtoau,alpha=0.75,color='tab:grey',zorder=-1,\
+                        label='$d_{min}\leq d_{crit}$')
+        
+        ax3.set_xlabel('$b\ [R_J]$')
+        ax3.set_ylabel(r'$r_{min}\ [R_\odot]$')
+        
+        ax3.set_xlim(-0.01/self.rjtoau,0.01/self.rjtoau)
+#        ax3.set_ylim(0,2/self.rstoau)
+        ax3.set_yscale('log')
+        
+        ax3.legend(prop={'size':12})
+        
+        add_AUax(ax3,self.rstoau,True)
+        
+        self.add_ptable(ax3)
+        add_date(fig3,xcoord=0.9075) 
         
     def add_ptable(self,ax,loc='top'):
         """Adds a table containing relevant properties of the system we are
         investigating"""
         a, e, _, r = self.pdata.T
-        celldata  = [[a[0],e[0],'{:.0e}'.format(self.q[0]),r[0]/self.rjtoau],\
-                     [a[1],e[1],'{:.0e}'.format(self.q[1]),r[1]/self.rjtoau]]
+        celldata  = [[a[0],e[0],'{:.0e}'.format(self.q[0]),'{:.2f}'.format(r[0]/self.rjtoau)],\
+                     [a[1],e[1],'{:.0e}'.format(self.q[1]),'{:.2f}'.format(r[1]/self.rjtoau)]]
         tabcol    = ['$a\ \mathrm{[AU]}$','$e$','$q$','$R\ [R_J]}$']
         tabrow    = ['$\mathrm{Orbit\ 1}$','$\mathrm{Orbit\ 2}$']
         
@@ -984,14 +1068,6 @@ class Scatter:
         yticks = ax.yaxis.get_major_ticks()
         yticks[-1].label1.set_visible(False)
         
-    def add_date(self,fig):
-        
-        date = datetime.datetime.now()
-        
-        datestr = '${0}$-${1}$-${2}$'.format(date.day,date.month,date.year)
-        
-        fig.text(0.91,0.945,datestr,bbox=dict(facecolor='None'),fontsize=14)
-        
 #We set up the data for the run
 
 #The data for the two planets
@@ -999,10 +1075,10 @@ class Scatter:
 plt.close('all')
 
 rjtoau = 1/2150
-mjtoms = 1/1047.35
-a1, a2 = 1.0,1.0
+metoms = 1/332946
+a1, a2 = 1.0,1.1
 e1, e2 = 0.0,0.8
-m1, m2 = 1e-3, 1e-4
+m1, m2 = 300*metoms, metoms
 p1data = np.array([a1,e1,m1])
 p2data = np.array([a2,e2,m2])
 
@@ -1026,7 +1102,7 @@ SC.plot_orbit()
 
 #b = 0.1
 #b = -10*rjtoau
-#b = 0.0005
+#b = 5
 #SC.scatter(b = b)
 #The corresponding vector triangle is given by
 
@@ -1039,8 +1115,8 @@ SC.plot_orbit()
 #of bvals given in an interval
 #bmax = SC.rc[0]
 bmax = 0.01*SC.rc[0]
-bvals = np.linspace(-bmax,bmax,1000)
-SC.plot_new_orb(bvals,0)
+bvals = np.linspace(-bmax,bmax,500)
+SC.plot_new_orb(bvals,1)
 SC.plot_defang_dmin()
 
 #dmin = SC.test_bvals()
