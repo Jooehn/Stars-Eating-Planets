@@ -6,6 +6,7 @@ Created on Fri Jul 12 14:32:29 2019
 @author: jooehn
 """
 
+import numpy as np
 import datetime
 import matplotlib.pyplot as plt
 from matplotlib.patches import Arc
@@ -64,6 +65,7 @@ def add_arrow(line, position=None, direction='right', size=14, color=None):
 def add_date(fig,xcoord=0.88):
     """Adds a box with the current date in the upper right corner of
     the figure"""
+
     date = datetime.datetime.now()
     
     datestr = '${0}$-${1}$-${2}$'.format(date.day,date.month,date.year)
@@ -76,7 +78,14 @@ def add_AUax(ax,scale,log=True):
     axn = ax.twinx()
     
     xdata = ax.lines[0].get_xdata()
-    ydata = ax.lines[0].get_ydata()
+    ydata1 = ax.lines[0].get_ydata()
+    ydata2 = ax.lines[1].get_ydata()
+    
+    if ydata1.std() > ydata2.std():
+        ydata = ydata1
+    else:
+        ydata = ydata2
+    
     ylab  = ax.get_ylabel()
     
     ylablist = ylab.split()

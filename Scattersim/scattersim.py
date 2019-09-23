@@ -1,4 +1,3 @@
-
 """
 Created on Tue Mar 26 13:22:07 2019
 
@@ -16,6 +15,7 @@ should be analysed with this in mind.
 import numpy as np
 import matplotlib.colors as mplcol
 import matplotlib.cm as cm
+import seaborn as sns
 from plotfuncs import *
 from smooth_1d import smooth
 
@@ -376,7 +376,7 @@ class Scatter:
         
         ax.set_xlim(-xmax,xmax)
         ax.set_ylim(-ymax,ymax)
-#        ax.set_yticks(np.arange(-ymax,ymax+1,1))
+        ax.set_yticks(np.arange(-ymax,ymax+1,1,dtype=int))
         ax.set_xlabel('$x\ \mathrm{[AU]}$')
         ax.set_ylabel('$y\ \mathrm{[AU]}$')
         
@@ -385,58 +385,313 @@ class Scatter:
         self.add_ptable(ax)
         add_date(fig)
         
-    def detect_coll(self,N):
+    def collfinder(self,N):
         
         #We extract the initial params
-        a,e,m,_ = self.pdata.T
+        a,e,m,R = self.pdata.T
         
-        #We want to find a range which would be suitable for our needs
+        #We want to find a range of b which would be suitable for our needs
         #This should be given by the point where change in eccentricity
         #with respect to the initial values is less than some tolerance
         
-        tol = 1e-2
+        def find_bmax():
         
-        #Our initial guess is 
-        fac = 0.1
-        bmax = fac*self.rc
-        bvals = np.linspace(-bmax,bmax,1000)
-        
-        self.scatter(b = bvals)
-        
-        det = abs(self.et1-e[0])
-        
-        #We can use our self.scoll mask to find if any collisions have occured
-        #and can then easily find which systems fulfill our criteria.
-        
-        while any(det>tol):
+            #We choose the tolerance
+            tol = 5e-2
             
-            fac = fac+0.01 
+            #Our initial guess is 
+            fac = 20
+            bmax_guess = fac*R.max()
+    
+            bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
             
-            bmax = 0.1*self.rc
-            bvals = np.linspace(-bmax,bmax,1000)
-        
             self.scatter(b = bvals)
-        
-            det = abs(self.et1-e[0])
+           
+            det = np.zeros((2,len(bvals)))
+            det[0] = abs(self.et1[:,0]-e[0])
+            det[1] = abs(self.et2[:,0]-e[1])
+            
+            #We can use our self.scoll mask to find if any collisions have occured
+            #and can then easily find which systems fulfill our criteria.
+            
+            good_range = np.all(det[0][-10:]>tol) or np.all(det[1][-10:]>tol)\
+                        or np.all(det[0][:10]>tol) or np.all(det[1][:10]>tol)
+    
+            while good_range:
+                fac = fac+1
+                
+                bmax_guess = fac*R.max()
+                bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
+            
+                self.scatter(b = bvals)
+            
+                det[0] = abs(self.et1[:,0]-e[0])
+                det[1] = abs(self.et2[:,0]-e[1])
+                
+                good_range = np.all(det[0][-10:]>tol) or np.all(det[1][-10:]>tol)\
+                        or np.all(det[0][:10]>tol) or np.all(det[1][:10]>tol)
+            
+            return bmax_guess
+            
+        bmax = find_bmax()
         
         #We now have our initial set of impact parameter values and can begin
         #to detect interesting orbital configurations
         
         #Monte Carlo simulation where we draw a bunch of impact parameter
-        #values for an initial system with specified orbital properties.
+        #values for an initial system with specified orbital properties
         
-        #We call our init functions again to get initial params
-    
-        self.get_phi_isec()
-        self.get_r2()
-        self.calc_v()
-        self.calc_rhill()
+        N_att = 50
         
-        #...
-        #...
-        #...
+        b_mc = np.random.uniform(-bmax,bmax,N)
         
-        #We also update the pdata with our newly found orbital params
+        self.scatter(b = b_mc)
+        
+        #We save the dmin values
+        dmin_mc = self.dmin
+        
+        at1vals = self.at1
+        et1vals = self.et1
+        at2vals = self.at2
+        et2vals = self.et2
+        
+        #We set up a figure for which we plot the progress of the MC simulation
+        
+        fig, [ax0,ax1] = plt.subplots(1,2,figsize=(12,6),sharey=True)
+        
+        for i in [ax0,ax1]:
+            i.set_xlabel('$b\ [R_J]$')
+            i.set_ylim(-0.1,1.1)
+            i.set_xlim(-bmax/self.rjtoau,bmax/self.rjtoau)
+        
+        ax1xticks = ax1.xaxis.get_major_ticks()
+        [ax1xticks[i].label1.set_visible(False) for i in range(2)]
+        ax0.set_ylabel(r'$\tilde{e}$')        
+        fig.subplots_adjust(wspace = 0)
+        
+        self.add_ptable(ax0)
+#        ax.set_xlim(-bmax/self.rjtoau,bmax/self.rjtoau)
+        #We set up a second figure to visualise the systems where we get scatterings
+        fig2, ax2 = plt.subplots(figsize=(10,6))
+        
+        ax2.set_xlabel(r'$\tilde{a}\ [AU]$')
+        ax2.set_ylabel(r'$\tilde{e}$')        
+        ax2.set_xlim(0.1,50)
+        ax2.set_ylim(-0.1,1.1)
+        ax2.set_xscale('log')
+        self.add_ptable(ax2)
+        
+        ax2.axvline(self.rcrit,linestyle='--',color='tab:grey',alpha=0.5)
+        
+        fig3, ax3 = plt.subplots(figsize=(10,6))
+        
+        ax3.set_xlabel('$\mathrm{Number\ of\ scatterings\ to\ get\ SPC}$')
+        ax3.set_ylabel('$\mathrm{Counts}$')
+        self.add_ptable(ax3)
+        
+        #We generate different colours for all cases
+        ccycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        if N > len(ccycle):
+            ncycle = int(np.ceil(N/len(ccycle)))
+            ccycle = np.concatenate([ccycle]*ncycle)
+        else:
+            ccycle = ccycle[:N]
+        
+        #We loop through all scatter scenarios and use the new orbital params
+        #for our new system, we keep doing this until we get either a collision
+        #or have more than N_att attempts to get one
+        
+        self._mcscolls = np.zeros(N,dtype=bool)
+        
+        barr  = []
+        et1arr = []
+        et2arr = []
+        at1arr = []
+        at2arr = []
+        spcet1 = []
+        spcet2 = []
+        spcat1 = []
+        spcat2 = []
+        
+        self._spc_iter = []
+        
+        for i in range(N):
+            
+            #We set up necessary variable
+            itr    = 0
+            coll   = False
+            eject1 = False
+            eject2 = False
+            
+            bn = b_mc[i]
+            dmin = dmin_mc[i]
+            
+            at1i = at1vals[i,0]
+            et1i = et1vals[i,0]
+            at2i = at2vals[i,0]
+            et2i = et2vals[i,0]
+            
+            #we save the old parameters
+            bvals  = [bn]
+            
+            mc_at1 = [at1i]
+            mc_et1 = [et1i]
+            mc_at2 = [at2i]
+            mc_et2 = [et2i]
+            
+            #We then perform our various scatterings and detect mergers
+            while np.any(self.scoll==False) & itr<=N_att:
+                    
+                self.pdata[0,0] = at1i
+                self.pdata[0,1] = et1i
+                self.pdata[1,0] = at2i
+                self.pdata[1,1] = et2i
+                
+                #We check if the new orbits cross. If they don't we break the run
+                
+                if not self.cross_check():
+                    break
+                
+                try:
+                    self.get_isec()
+                except Exception:
+                    break
+                
+                #If we get a merger or an ejection we terminate as well
+                if self.dcrit>=dmin:
+                    coll = True
+                    break
+                elif et2i>1:
+                    eject1 = True
+                    break
+                elif et2i>1:
+                    eject2 = True
+                    break
+                self.calc_v()
+                self.calc_rhill()
+                
+                #We then carry out a new scattering
+                
+                #Uncomment to get new bmax for every scatter
+#                bmax = find_bmax()
+                
+                bn = np.random.uniform(-bmax,bmax)
+                
+                itr += 1
+                
+                self.scatter(b = bn)
+                
+                #We save the old parameters
+                mc_at1.append(at1i)
+                mc_et1.append(et1i)
+                mc_at2.append(at2i)
+                mc_et2.append(et2i)
+                
+                #We also save the impact parameter
+                bvals.append(bn)
+                
+                #We update the orbital elements
+                at1i = self.at1[0,0]
+                et1i = self.et1[0,0]
+                at2i = self.at2[0,0]
+                et2i = self.et2[0,0]
+                
+                #We also save the new dmin values
+                dmin = self.dmin
+                
+            if len(mc_et1)==0 or len(mc_et2)==0:
+                continue
+            
+            if np.any(self.scoll) & (self.dcrit<dmin) & np.all([et1i<1,et2i<1]):
+                
+                #We also have to log the values for which we get a S-P collision
+                bvals.append(bn)
+                
+                mc_at1.append(at1i)
+                mc_et1.append(et1i)
+                mc_at2.append(at2i)
+                mc_et2.append(et2i)
+                
+                #We also save the number of iterations it took to get an S-P collision
+            
+                self._spc_iter.append(itr)
+            
+            et1arr.append(mc_et1)
+            et2arr.append(mc_et2)
+            at1arr.append(mc_at1)
+            at2arr.append(mc_at2)
+            
+            barr.append(bvals)
+                
+            if np.any(self.scoll[0,0]) & (self.dcrit<dmin) & (mc_et1[-1]<1):
+                self._mcscolls[i] == True
+                ax0.plot(bvals[-1]/self.rjtoau,mc_et1[-1],'X',markersize=7,markerfacecolor='tab:green',\
+                          markeredgecolor='k',markeredgewidth=0.5,zorder=2)
+                
+                spcet1.append(mc_et1[-1])
+                spcet2.append(mc_et2[-1])
+                spcat1.append(mc_at1[-1])
+                spcat2.append(mc_at2[-1])
+                
+                ax2.plot(mc_at1[-2],mc_et1[-2],'o',markersize=5,markerfacecolor='blue',\
+                           markeredgecolor='k',markeredgewidth=0.1,zorder=2)
+                ax2.plot(mc_at2[-2],mc_et2[-2],'o',markersize=5,markerfacecolor='red',\
+                           markeredgecolor='k',markeredgewidth=0.1,zorder=2)
+                
+                ax2.plot([mc_at1[-2],mc_at2[-2]],[mc_et1[-2],mc_et2[-2]],'-',color='tab:gray'\
+                         ,alpha=0.3,zorder=1)
+                
+            elif np.any(self.scoll[0,1]) & (self.dcrit<dmin) & (mc_et2[-1]<1):
+                self._mcscolls[i] == True
+                ax1.plot(bvals[-1]/self.rjtoau,mc_et2[-1],'X',markersize=7,markerfacecolor='tab:green',\
+                          markeredgecolor='k',markeredgewidth=0.5,zorder=2)
+                
+                spcet1.append(mc_et1[-1])
+                spcet2.append(mc_et2[-1])
+                spcat1.append(mc_at1[-1])
+                spcat2.append(mc_at2[-1])
+                
+                ax2.plot(mc_at1[-2],mc_et1[-2],'o',markersize=5,markerfacecolor='blue',\
+                           markeredgecolor='k',markeredgewidth=0.1,zorder=2)
+                ax2.plot(mc_at2[-2],mc_et2[-2],'o',markersize=5,markerfacecolor='red',\
+                           markeredgecolor='k',markeredgewidth=0.1,zorder=2)
+                
+                ax2.plot([mc_at1[-2],mc_at2[-2]],[mc_et1[-2],mc_et2[-2]],'-',color='tab:gray'\
+                         ,alpha=0.3,zorder=1)
+                
+            elif coll:
+                ax0.plot(bvals[-1],mc_et1[-1],'X',markersize=7,markerfacecolor='tab:gray',\
+                          markeredgecolor='k',markeredgewidth=0.5,zorder=1)
+                ax1.plot(bvals[-1],mc_et2[-1],'X',markersize=7,markerfacecolor='tab:gray',\
+                          markeredgecolor='k',markeredgewidth=0.5,zorder=1)
+#                ax.plot(bvals[-1],mc_et2[-1],'X',markersize=7,markerfacecolor='tab:gray',\
+#                          markeredgecolor='k',markeredgewidth=0.5,zorder=2,alpha=0.5)
+            elif eject1:
+                ax0.plot(bvals[-1],mc_et1[-1],'X',markersize=7,markerfacecolor='tab:brown',\
+                          markeredgecolor='k',markeredgewidth=0.5,zorder=1)
+            elif eject2:
+                ax1.plot(bvals[-1],mc_et2[-1],'X',markersize=7,markerfacecolor='tab:brown',\
+                          markeredgecolor='k',markeredgewidth=0.5,zorder=1)
+        
+        barr  = np.concatenate(barr)
+        et1arr = np.concatenate(et1arr)
+        et2arr = np.concatenate(et2arr)
+        
+        sns.kdeplot(barr/self.rjtoau,et1arr, cmap="Blues", shade=True, shade_lowest=True,zorder=1,\
+                    ax = ax0)
+        sns.kdeplot(barr/self.rjtoau,et2arr, cmap="Reds", shade=True, shade_lowest=True,zorder=1,
+                    ax = ax1)
+
+        counts,binvals = np.histogram(self._spc_iter,bins = np.arange(0,N_att+1,1))
+        
+        xvals = 0.5*(binvals[1:]+binvals[:-1])
+        ax3.bar(xvals,counts)
+        yint = list(range(min(counts), int(np.ceil(max(counts)))+1))
+        ax3.set_yticks(yint[::2])
+        
+        #We add dates to each figure
+        for i in [fig,fig2,fig3]:
+            add_date(i,0.9075)
         
     def test_bvals(self):
         """Solves the Kepler problem for two orbits, given a varying set of
@@ -633,15 +888,13 @@ class Scatter:
         
         return dminf
         
-    def plot_vectri(self,planet=1):
+    def plot_vectri(self,planet=1,idx=0):
         """Plots the vector triangle for a given planet after performing a 
         scattering with impact parameter b."""
         
         fig, ax = plt.subplots(figsize=(10,8))
         
         #We extract the information we need
-        
-        idx = 0
         
         if planet == 1:
             
@@ -699,7 +952,7 @@ class Scatter:
             
         #We also plot a vector pointing towards the position of the host star
         
-        xhs, yhs = np.cos(self.phic[idx]+np.pi),np.sin(self.phic[idx]+np.pi)
+        xhs, yhs = 10*np.cos(self.phic[idx]+np.pi),10*np.sin(self.phic[idx]+np.pi)
         
         hsp, = ax.plot([0,xhs],[0,yhs],'-',color='tab:gray',\
                        label=r'$\hat{r}_{\star}$')
@@ -993,7 +1246,7 @@ class Scatter:
         gzone = ax2.axvspan(bmin/self.rjtoau,bmax/self.rjtoau,alpha=0.75,color='tab:grey',zorder=-1,\
                             label='$d_{min}\leq d_{crit}$')
         
-        if np.any(SC.scoll):
+        if np.any(self.scoll):
             hlist = [orb1,orb2,elim1,elim2,gzone,sczone]
         else:
             hlist = [orb1,orb2,elim1,elim2,gzone]
@@ -1067,56 +1320,3 @@ class Scatter:
         
         yticks = ax.yaxis.get_major_ticks()
         yticks[-1].label1.set_visible(False)
-        
-#We set up the data for the run
-
-#The data for the two planets
-
-plt.close('all')
-
-rjtoau = 1/2150
-metoms = 1/332946
-a1, a2 = 1.0,1.1
-e1, e2 = 0.0,0.8
-m1, m2 = 300*metoms, metoms
-p1data = np.array([a1,e1,m1])
-p2data = np.array([a2,e2,m2])
-
-#We set up the class object with orbits corresponding to the given parameters
-#We can also choose to misalign the semi-major axes by an angle theta given
-#in radians
-
-theta = 0
-Mstar = 1
-Rstar = 1/215
-
-SC = Scatter(p1data,p2data,Mstar,Rstar,theta=theta)
-
-#Now, we can call the functions
-
-#The orbits can be plotted using the following function 
-
-SC.plot_orbit()
-
-#We then perform a single scattering with an impact parameter b
-
-#b = 0.1
-#b = -10*rjtoau
-#b = 5
-#SC.scatter(b = b)
-#The corresponding vector triangle is given by
-
-#SC.plot_vels(0)
-#SC.plot_vectri(1)
-#SC.plot_vectri(2)
-#print(np.rad2deg(SC.defang))
-
-#We can also plot the resulting orbital elements after a scatterings with a set
-#of bvals given in an interval
-#bmax = SC.rc[0]
-bmax = 0.01*SC.rc[0]
-bvals = np.linspace(-bmax,bmax,500)
-SC.plot_new_orb(bvals,1)
-SC.plot_defang_dmin()
-
-#dmin = SC.test_bvals()

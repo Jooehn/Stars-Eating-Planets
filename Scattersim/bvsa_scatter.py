@@ -1,7 +1,7 @@
 """
-Created on Tue Apr 23 16:10:22 2019
+Created on Fri Sep 20 15:59:45 2019
 
-@author: jooehn
+@author: John Wimarsson
 """
 
 import numpy as np
@@ -23,11 +23,6 @@ plt.rcParams['hatch.linewidth'] = 2
 
 plt.close('all')
 
-rjtoau = 1/2150
-
-a1, a2 = 1.0,1.1
-e1, e2 = 0.0,0.9
-
 #We set up the class object with orbits corresponding to the given parameters
 #We can also choose to misalign the semi-major axes by an angle theta given
 #in radians
@@ -35,19 +30,17 @@ e1, e2 = 0.0,0.9
 theta = 0
 Rstar = 1/215
 Mstar = 1
+metoms = 1/332946
+rjtoau = 1/2150
 
-#We set up a set of q values which we will investigate by setting up the values
+a1     = 1
+e1, e2 = 0.0,0.88
+m1, m2 = 300*metoms, 300*metoms
+
+#We set up a set of a values which we will investigate by setting up the values
 #of our planets for each iteration.
 
-earthtosunm = 1/332946
-
-m2vals1 = np.logspace(np.log10(1),np.log10(300),200)
-m1vals1 = (301-m2vals1)
-
-m1vals = np.concatenate([m1vals1,m2vals1])*earthtosunm
-m2vals = np.concatenate([m2vals1,m1vals1])*earthtosunm
-
-qvals = m2vals/m1vals
+avals = np.logspace(-1,2,500)
 
 #We also define a set of bvals for which we will evaluate for each q
 
@@ -56,25 +49,25 @@ bvals = np.linspace(-bmax,bmax,1000)
 
 #Set up a few empty containers
 
-devals1 = np.zeros(len(qvals))
-devals2 = np.zeros(len(qvals))
+devals1 = np.zeros(len(avals))
+devals2 = np.zeros(len(avals))
 
-bminarr11 = np.zeros(len(qvals))
-bmaxarr11 = np.zeros(len(qvals))
+bminarr11 = np.zeros(len(avals))
+bmaxarr11 = np.zeros(len(avals))
 
-bminarr12 = np.zeros(len(qvals))
-bmaxarr12 = np.zeros(len(qvals))
+bminarr12 = np.zeros(len(avals))
+bmaxarr12 = np.zeros(len(avals))
 
-bminarr21 = np.zeros(len(qvals))
-bmaxarr21 = np.zeros(len(qvals))
+bminarr21 = np.zeros(len(avals))
+bmaxarr21 = np.zeros(len(avals))
 
-bminarr22 = np.zeros(len(qvals))
-bmaxarr22 = np.zeros(len(qvals))
+bminarr22 = np.zeros(len(avals))
+bmaxarr22 = np.zeros(len(avals))
 
-qmask11   = np.full(len(qvals),False)
-qmask12   = np.full(len(qvals),False)
-qmask21   = np.full(len(qvals),False)
-qmask22   = np.full(len(qvals),False)
+amask11   = np.full(len(avals),False)
+amask12   = np.full(len(avals),False)
+amask21   = np.full(len(avals),False)
+amask22   = np.full(len(avals),False)
 
 #We then loop through all our q-values and save the points for which the upper
 #and lower points in b for both of our orbital collision points.
@@ -82,17 +75,19 @@ qmask22   = np.full(len(qvals),False)
 #fig, ax = plt.subplots(figsize=(10,6))
 fig, ax = plt.subplots(figsize=(10,6))
 
-for i in range(len(qvals)):
+for i in range(len(avals)):
     
     #For each mass combination we perform a scattering and plot the result
     
-    m1 = m1vals[i]
-    m2 = m2vals[i]
+    a2 = avals[i]
     
     p1data = np.array([a1,e1,m1])
     p2data = np.array([a2,e2,m2])    
     
-    SC = Scatter(p1data,p2data,Mstar,Rstar,theta=theta)
+    try:
+        SC = Scatter(p1data,p2data,Mstar,Rstar,theta=theta)
+    except Exception:
+        continue
     
     #We perform the scatterings
     SC.scatter(b=bvals)
@@ -123,24 +118,24 @@ for i in range(len(qvals)):
 #    if np.allclose(abs(SC.et2-e2),0):
 #        devals2 = 1
     
-    qp = np.asarray([qvals[i]]*len(bvals))
+    ap = np.asarray([avals[i]]*len(bvals))
 
-    scim = ax.scatter(qp[mask11],bvals[mask11]/rjtoau,c=SC.et1[:,0][mask11],s=3,\
+    scim = ax.scatter(ap[mask11],bvals[mask11]/rjtoau,c=SC.et1[:,0][mask11],s=3,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
-    ax.scatter(qp[mask12],bvals[mask12]/rjtoau,c=SC.et1[:,1][mask12],s=3,\
+    ax.scatter(ap[mask12],bvals[mask12]/rjtoau,c=SC.et1[:,1][mask12],s=3,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
-    ax.scatter(qp[mask21],bvals[mask21]/rjtoau,c=SC.et2[:,0][mask21],s=3,\
+    ax.scatter(ap[mask21],bvals[mask21]/rjtoau,c=SC.et2[:,0][mask21],s=3,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
-    ax.scatter(qp[mask22],bvals[mask22]/rjtoau,c=SC.et2[:,1][mask22],s=3,\
+    ax.scatter(ap[mask22],bvals[mask22]/rjtoau,c=SC.et2[:,1][mask22],s=3,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
    
-    ax.scatter(qp[mask11],bvals[mask11]/rjtoau,c=col1[mask11],s=3)
-    ax.scatter(qp[mask12],bvals[mask12]/rjtoau,c=col1[mask12],s=3)
-    ax.scatter(qp[mask21],bvals[mask21]/rjtoau,c=col2[mask21],s=3)
-    ax.scatter(qp[mask22],bvals[mask22]/rjtoau,c=col2[mask22],s=3)
+    ax.scatter(ap[mask11],bvals[mask11]/rjtoau,c=col1[mask11],s=3)
+    ax.scatter(ap[mask12],bvals[mask12]/rjtoau,c=col1[mask12],s=3)
+    ax.scatter(ap[mask21],bvals[mask21]/rjtoau,c=col2[mask21],s=3)
+    ax.scatter(ap[mask22],bvals[mask22]/rjtoau,c=col2[mask22],s=3)
     
-    ax.scatter(qp[mask12],bvals[mask12]/rjtoau,c=SC.et1[:,0][mask12],s=7,alpha=0,hatch='/')
-    ax.scatter(qp[mask22],bvals[mask22]/rjtoau,s=7,alpha=0,hatch='/')
+    ax.scatter(ap[mask12],bvals[mask12]/rjtoau,c=SC.et1[:,0][mask12],s=7,alpha=0,hatch='/')
+    ax.scatter(ap[mask22],bvals[mask22]/rjtoau,s=7,alpha=0,hatch='/')
 
 #We also make a legend handle
 ghand = plt.Rectangle((0, 0), 1, 1, fc="tab:green",label=r'$e_{i,crit}<\tilde{e}_i<1$')
@@ -148,14 +143,11 @@ rhand = plt.Rectangle((0, 0), 1, 1, fc="tab:red",label=r'$d_{min}\leq d_{crit}$'
 hhand1 = plt.Rectangle((0, 0), 1, 1, fc="None",ec='k',label='$\mathrm{Orbit\ crossing\ A}$')
 hhand2 = plt.Rectangle((0, 0), 1, 1, fc="None",ec='k',hatch='/',label='$\mathrm{Orbit\ crossing\ B}$')
 
-ax.set_xlabel('$q_p$')
-ax.set_ylabel(r'$\tilde{e_i}$')
-#
 ax.set_xscale('log')
-ax.set_xlim(qvals.min(),qvals.max())
+ax.set_xlim(avals.min(),avals.max())
 ax.set_ylim(-bmax/rjtoau,bmax/rjtoau)
 
-ax.set_xlabel('$q_p$')
+ax.set_xlabel('$a_2\ \mathrm{[AU]}$')
 ax.set_ylabel(r'$b\ [\mathrm{R_J}]$')
 
 #divider = make_axes_locatable(ax)
@@ -174,7 +166,7 @@ cbar.ax.set_ylabel(r'$\tilde{e}$')
 
 #We also add a table
 
-celldata  = [[a1,e1,'$m_1\in[1,300]$'],[a2,e2,'$301-m_1$']]
+celldata  = [[a1,e1,int(m1/metoms)],['$a_2\in[0.1,100]$',e2,int(m2/metoms)]]
 tabcol    = [r'$a\ \mathrm{[AU]}$','$e$','$m_p\ [M_\oplus]$']
 tabrow    = ['$\mathrm{Orbit\ 1}$','$\mathrm{Orbit\ 2}$']
 
