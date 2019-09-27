@@ -12,6 +12,7 @@ import _pickle as cPickle
 import pandas as pd
 import math
 import string
+from plotfuncs import *
 
 plt.rcParams['font.size']= 16
 plt.rcParams['xtick.minor.visible'], plt.rcParams['xtick.top'] = True,True
@@ -246,7 +247,7 @@ class m6_analysis:
     def __detect_death(self):
         
         deaths = []
-        
+        cols   = [[],[],[]]
         with open('lossinfo.txt','r') as losses:
             
             for line in losses:
@@ -256,10 +257,24 @@ class m6_analysis:
                     t_loss  = line.split()[-2]
                     if loss in self.names:
                         
+                        if 'was hit by' in line:
+                            tar  = loss
+                            loss = line.split()[5]
+                            
+                            lossid = self.names.index(loss)
+                            tarid = self.names.index(tar)
+                            
+                            cols[0].append(int(simid))
+                            cols[1].append(int(lossid))
+                            cols[2].append(int(tarid))
+                            
                         lossid = self.names.index(loss)
                         deaths.append(np.array([simid,lossid,t_loss],dtype=np.float))  
                 except IndexError:
                     continue
+        
+        self._clist = np.asarray(cols)
+        
         return np.asarray(deaths)
     
     def __detect_col(self):
@@ -420,14 +435,14 @@ class m6_analysis:
         
         msize = mvals**(1/3)*500
         
-        avals[self.sclist[0],self.sclist[1]] = 0
+        avals[self._dlist[:,0].astype(int),self._dlist[:,1].astype(int)] = 0
 #        avals[tmask]       = 0
 #        msize[tmask]       = 0
         
         yvals    = np.zeros((self.N,self.K))
         yvals[:] = np.arange(1,self.K+1,1)
         
-        fig, ax = plt.subplots(figsize=(10,self.K/2))
+        fig, ax = plt.subplots(figsize=(10,self.K/4))
         
         clist = ['m','b','g','r','orange']
         
@@ -487,6 +502,25 @@ class m6_analysis:
                 ax.axhspan((j+1-0.2),(j+1+0.2),alpha=0.3,color='g',zorder=1)
             elif j in self._badruns:
                 ax.axhspan((j+1-0.2),(j+1+0.2),alpha=0.3,color='k',zorder=1)
+                
+        #Finally, we plot the planets that have collided with the survivors
+        #behind them
+        
+        for j in range(self.K):
+            if j in self._clist[0]:
+                
+                sysid = self._clist[0][self._clist[0] == j]
+                plaid = self._clist[1][self._clist[0] == j]
+                tarid = self._clist[2][self._clist[0] == j]
+                
+                tarx  = avals[sysid,tarid]
+                
+                fcc = [clist[i] for i in plaid]
+                ecc = [clist[i] for i in tarid]
+                
+            
+                ax.scatter(tarx,sysid+1,s=msizesc[j][tarid],c=fcc,edgecolor=ecc,\
+                           linewidth=4,zorder=2)
 
         ax.set_yticks(np.arange(1,self.K+1))
         ax.set_xscale('log')
@@ -510,6 +544,8 @@ class m6_analysis:
         labels = list(range(self.K))
             
         ax.set_yticklabels(labels)
+        
+#        add_date(fig)
         
     def alpha_vs_teject(self):
         
