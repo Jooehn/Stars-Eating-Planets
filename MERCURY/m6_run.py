@@ -49,7 +49,7 @@ N_all   = len(all_names)
 
 #We choose the number of simulations
 
-N_sim = 50
+N_sim = 1
 
 #We define variables for strings that we want to find in the info.out file
 
@@ -195,29 +195,30 @@ for k in range(N_sim):
     
     simdata.append(orb_data)
     ce_simdata.append(ce_data)
-
-#With the help of pandas, we can create a nicely formatted file with all the info
-#we need to find possible outlier simulations
-
-siminfo_pd = pd.DataFrame(siminfo,columns = ['Surv',\
-             'SCols','Eject','Cols','dE','dL'])
-
-with open('siminfo.txt','a') as simfile:
-
-    simfile.write(siminfo_pd.__repr__())
     
-#We would also like to save all our data, which is efficiently done using a 
-#pickle dump
-    
-if any([len(i)!=0 for i in ce_simdata]):
-    
-    m6_save_data(simdata,ce_simdata)
+    call['rm','*.pk1']
 
-else:
-    m6_save_data(simdata)
+    #With the help of pandas, we can create a nicely formatted file with all the info
+    #we need to find possible outlier simulations
+    
+    siminfo_pd = pd.DataFrame(siminfo,columns = ['Surv',\
+                 'SCols','Eject','Cols','dE','dL'])
+    
+    with open('siminfo.txt','a') as simfile:
+    
+        simfile.write(siminfo_pd.__repr__())
+        
+    #We would also like to save all our data, which is efficiently done using a 
+    #pickle dump
+        
+    if any([len(i)!=0 for i in ce_simdata]):
+        
+        m6_save_data(simdata,ce_simdata)
+    
+    else:
+        m6_save_data(simdata)
+
 #The data can then easily be extracted using m6_load_data()
-
-#We clear the rest of the files we do not need to keep things tidy
 
 #We then want to clear any output or dump files present in the working
 #directory, which we can do via our terminal
@@ -228,7 +229,7 @@ for j in bad_ext:
 #We send an email to indicate that the run is finished
     
 email = 'nat15jwi@student.lu.se'
-yag = yagmail.SMTP(email,'D3f3nd1m3px4')
+yag = yagmail.SMTP(email,'pass')
 yag.send(email,'MERCURY Run','The run is now finished')
 
 print('My work here is done')

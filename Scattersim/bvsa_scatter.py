@@ -95,18 +95,18 @@ for i in range(len(avals)):
     #Next we find which planets have critically interacted with the host star
     #as well as which ones have collided
     
-    mask11 = SC.scoll[:,0,0] & (SC.et1[:,0]<1)
-    mask12 = SC.scoll[:,0,1] & (SC.et1[:,1]<1)
+    mask11 = SC.scoll[:,0,0]
+    mask12 = SC.scoll[:,0,1]
     
-    mask21 = SC.scoll[:,1,0] & (SC.et2[:,0]<1)
-    mask22 = SC.scoll[:,1,1] & (SC.et2[:,1]<1)
+    mask21 = SC.scoll[:,1,0]
+    mask22 = SC.scoll[:,1,1]
    
     col1 = np.asarray(["tab:red"]*np.size(SC.b))
     col2 = np.asarray(["tab:red"]*np.size(SC.b))
 
     #We also check for which cases we get a P-P merger
-    col1[SC.dcrit<SC.dmin] = 'None'
-    col2[SC.dcrit<SC.dmin] = 'None'
+    col1[~SC.merger[:,0]] = 'None'
+    col2[~SC.merger[:,1]] = 'None'
     
     #Further, we check if the total change of the eccentricity is small
     

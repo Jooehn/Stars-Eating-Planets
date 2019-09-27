@@ -229,9 +229,9 @@ class Scatter:
         
         m1, m2 = self.pdata[:,2]
         
-        vnormsq = (self.vrel[0,0]**2+self.vrel[0,1]**2)
+        vnormsq = (self.vrel[:,0]**2+self.vrel[:,1]**2)
         
-        psi = np.arctan((b*vnormsq)/(self.G*(m1+m2)))
+        psi = np.arctan((b[:,None]*vnormsq)/(self.G*(m1+m2)))
         
         self.defang = (np.pi - 2*psi)
         
@@ -240,11 +240,12 @@ class Scatter:
         
         #We first find the eccentricity of the close encounter
         
-        e_sc = np.sqrt(1+(b**2*vnormsq**2)/(self.G**2*(m1+m2)))
+        e_sc = np.sqrt(1+(b[:,None]**2*vnormsq**2)/(self.G**2*(m1+m2)))
         
         #Then the minimum distances between the planets becomes
         
-        self.dmin = (b**2*vnormsq)/(self.G*(m1+m2)*(1+e_sc))
+        self.dmin    = np.zeros((np.size(b),2))
+        self.dmin[:] = (b[:,None]**2*vnormsq)/(self.G*(m1+m2)*(1+e_sc))
         
     def scatter(self,N=1,b=None):
         """Performs the scattering between the two planets in our system and
@@ -253,7 +254,7 @@ class Scatter:
         m1, m2 = self.pdata[:,2]
         
         if b is None:
-            bmax = self.rc*0.05
+            bmax = self.find_bmax()
             b = np.random.uniform(-bmax,bmax,N)
         
         self.get_defang(b)
@@ -262,20 +263,26 @@ class Scatter:
         
         #We first calculate the new velocities w.r.t. the centre of mass
         
-        mrot1 = np.array([[np.cos(self.defang),-np.sin(self.defang)],\
-                         [np.sin(self.defang),np.cos(self.defang)]]).T
+        mrot11 = np.array([[np.cos(self.defang[:,0]),-np.sin(self.defang[:,0])],\
+                         [np.sin(self.defang[:,0]),np.cos(self.defang[:,0])]]).T
         
-        mrot2 = np.array([[np.cos(self.defang),-np.sin(self.defang)],\
-                         [np.sin(self.defang),np.cos(self.defang)]]).T
+        mrot12 = np.array([[np.cos(self.defang[:,1]),-np.sin(self.defang[:,1])],\
+                         [np.sin(self.defang[:,1]),np.cos(self.defang[:,1])]]).T
+        
+        mrot21 = np.array([[np.cos(self.defang[:,0]),-np.sin(self.defang[:,0])],\
+                         [np.sin(self.defang[:,0]),np.cos(self.defang[:,0])]]).T    
+    
+        mrot22 = np.array([[np.cos(self.defang[:,1]),-np.sin(self.defang[:,1])],\
+                         [np.sin(self.defang[:,1]),np.cos(self.defang[:,1])]]).T
         
         self.vb1n = np.zeros((np.size(b),2,2))
         self.vb2n = np.zeros((np.size(b),2,2))
           
-        self.vb1n[:,0] = np.matmul(mrot1,self.vb1[0])
-        self.vb1n[:,1] = np.matmul(mrot1,self.vb1[1])
+        self.vb1n[:,0] = np.matmul(mrot11,self.vb1[0])
+        self.vb1n[:,1] = np.matmul(mrot12,self.vb1[1])
         
-        self.vb2n[:,0] = np.matmul(mrot2,self.vb2[0])
-        self.vb2n[:,1] = np.matmul(mrot2,self.vb2[1])
+        self.vb2n[:,0] = np.matmul(mrot21,self.vb2[0])
+        self.vb2n[:,1] = np.matmul(mrot22,self.vb2[1])
         
         #We can then easily obtain the new velocities for each planet
         
@@ -329,63 +336,85 @@ class Scatter:
         self.rmin[:,0] = self.at1*(1-self.et1)
         self.rmin[:,1] = self.at2*(1-self.et2)
         
-        self.scoll = self.rmin<self.rcrit
+#        self.scoll = self.rmin<self.rcrit 
+        self.scoll      = np.zeros((np.size(b),2,2),dtype=bool)
+        self.scoll[:,0] = (self.rmin[:,0] < self.rcrit) & (self.et1 < 1)
+        self.scoll[:,1] = (self.rmin[:,1] < self.rcrit) & (self.et2 < 1)
+        
+        #We also check which objects have been ejected
+        self.eject      = np.zeros((np.size(b),2,2))
+        self.eject[:,0,0] = (self.dmin[:,0] > self.dcrit) & (self.et1[:,0] >= 1)
+        self.eject[:,0,1] = (self.dmin[:,1] > self.dcrit) & (self.et1[:,1] >= 1)
+        self.eject[:,1,0] = (self.dmin[:,0] > self.dcrit) & (self.et2[:,0] >= 1)
+        self.eject[:,1,1] = (self.dmin[:,1] > self.dcrit) & (self.et2[:,1] >= 1)
+        
+        #And finally the bvalues which lead to mergers
+        self.merger       = np.zeros((np.size(b),2),dtype=bool)
+        self.merger[:,0]  = self.dmin[:,0] <= self.dcrit
+        self.merger[:,1]  = self.dmin[:,1] <= self.dcrit
         
         #We can also compute the critical eccentricity for a given semi-major axis
         
-        self.ecrit = np.zeros((np.size(b),2,2))
+        self.ecrit      = np.zeros((np.size(b),2,2))
         self.ecrit[:,0] = 1 - self.rcrit/self.at1
         self.ecrit[:,1] = 1 - self.rcrit/self.at2
         
-    def plot_orbit(self):
-        """Plots the circular and eccentric orbits and marks the point of crossing."""
+    def find_bmax(self):
+        """Finds an optimal bmax for the system at hand by requiring that the 
+        the outer edges of the range of b-values should be where the change in
+        eccentricity due to a scattering at the corresponding b-values should 
+        be smaller than som tolerance."""
         
-        a1, e1, m1, _ = self.pdata[0]
-        a2, e2, m2, _ = self.pdata[1]
+        a,e,m,R = self.pdata.T
         
-        ang = np.linspace(0,2*np.pi,1000)
+        #We choose the tolerance
+        tol = 5e-2
         
-        r1, r2 = self.get_orbit_r(ang)
+        #Our initial guess is 
+        fac = 20
+        bmax_guess = fac*R.max()
+
+        bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
         
-        x1 = r1*np.cos(ang)
-        y1 = r1*np.sin(ang)
-        x2 = r2*np.cos(ang)
-        y2 = r2*np.sin(ang)
+        self.scatter(b = bvals)
+       
+        det = np.zeros((2,len(bvals)))
+        det[0] = abs(self.et1[:,0]-e[0])
+        det[1] = abs(self.et2[:,0]-e[1])
         
-        #Finally we compute the coordinates of the orbit crossing
-        xc1 = self.rc[0]*np.cos(self.phic[0])
-        yc1 = self.rc[0]*np.sin(self.phic[0])
+        #We can use our self.scoll mask to find if any collisions have occured
+        #and can then easily find which systems fulfill our criteria.
         
-        xc2 = self.rc[1]*np.cos(self.phic[1])
-        yc2 = self.rc[1]*np.sin(self.phic[1])
+        good_range = np.all(det[0][-10:]>tol) or np.all(det[1][-10:]>tol)\
+                    or np.all(det[0][:10]>tol) or np.all(det[1][:10]>tol)
+
+        while good_range:
+            fac = fac+1
+            
+            bmax_guess = fac*R.max()
+            bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
         
-        fig, ax = plt.subplots(figsize=(8,6))
+            self.scatter(b = bvals)
         
-        ax.plot(x1,y1,'b-',label='$\mathrm{Orbit\ 1}$')
-        ax.plot(x2,y2,'r-',label='$\mathrm{Orbit\ 2}$')
-        ax.plot(0,0,marker='+',color='tab:gray',ms=10)
-        ax.plot(xc1,yc1,'k+',markersize=7,label='$r_1 = r_2$')
-        ax.text(xc1-0.1,yc1+0.1,'$\mathrm{A}$')
-        ax.plot(xc2,yc2,'k+',markersize=7) #Due to symmetry, we get two crossings
-        ax.text(xc2-0.1,yc2-0.2,'$\mathrm{B}$')
+            det[0] = abs(self.et1[:,0]-e[0])
+            det[1] = abs(self.et2[:,0]-e[1])
+            
+            good_range = np.all(det[0][-10:]>tol) or np.all(det[1][-10:]>tol)\
+                    or np.all(det[0][:10]>tol) or np.all(det[1][:10]>tol)
         
-        ax.set_aspect('equal')
-        
-        xmax = int(np.ceil(np.amax(np.absolute([x1,x2]))))
-        ymax = int(np.ceil(np.amax(np.absolute([x1,x2]))))
-        
-        ax.set_xlim(-xmax,xmax)
-        ax.set_ylim(-ymax,ymax)
-        ax.set_yticks(np.arange(-ymax,ymax+1,1,dtype=int))
-        ax.set_xlabel('$x\ \mathrm{[AU]}$')
-        ax.set_ylabel('$y\ \mathrm{[AU]}$')
-        
-        ax.legend(prop={'size':13})
-        
-        self.add_ptable(ax)
-        add_date(fig)
+        return bmax_guess
         
     def collfinder(self,N):
+        """Carries out Monte Carlo simulations of subsequent scattering events
+        between two planets in a pre-defined planetary system. We draw one value
+        from a uniform distribution of impact parameters and then scatter the 
+        two objects until the system has been resolved, i.e. 
+            1. The orbits do not cross anymore
+            2. One of the planets is ejected
+            3. One of the planets collides with the host star
+            4. The two planets undergo a merger
+        
+            N: The number of simulations we want to perform"""
         
         #We extract the initial params
         a,e,m,R = self.pdata.T
@@ -393,47 +422,8 @@ class Scatter:
         #We want to find a range of b which would be suitable for our needs
         #This should be given by the point where change in eccentricity
         #with respect to the initial values is less than some tolerance
-        
-        def find_bmax():
-        
-            #We choose the tolerance
-            tol = 5e-2
             
-            #Our initial guess is 
-            fac = 20
-            bmax_guess = fac*R.max()
-    
-            bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
-            
-            self.scatter(b = bvals)
-           
-            det = np.zeros((2,len(bvals)))
-            det[0] = abs(self.et1[:,0]-e[0])
-            det[1] = abs(self.et2[:,0]-e[1])
-            
-            #We can use our self.scoll mask to find if any collisions have occured
-            #and can then easily find which systems fulfill our criteria.
-            
-            good_range = np.all(det[0][-10:]>tol) or np.all(det[1][-10:]>tol)\
-                        or np.all(det[0][:10]>tol) or np.all(det[1][:10]>tol)
-    
-            while good_range:
-                fac = fac+1
-                
-                bmax_guess = fac*R.max()
-                bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
-            
-                self.scatter(b = bvals)
-            
-                det[0] = abs(self.et1[:,0]-e[0])
-                det[1] = abs(self.et2[:,0]-e[1])
-                
-                good_range = np.all(det[0][-10:]>tol) or np.all(det[1][-10:]>tol)\
-                        or np.all(det[0][:10]>tol) or np.all(det[1][:10]>tol)
-            
-            return bmax_guess
-            
-        bmax = find_bmax()
+        bmax = self.find_bmax()
         
         #We now have our initial set of impact parameter values and can begin
         #to detect interesting orbital configurations
@@ -887,6 +877,54 @@ class Scatter:
         print(slope)
         
         return dminf
+    
+    def plot_orbit(self):
+        """Plots the circular and eccentric orbits and marks the point of crossing."""
+        
+        a1, e1, m1, _ = self.pdata[0]
+        a2, e2, m2, _ = self.pdata[1]
+        
+        ang = np.linspace(0,2*np.pi,1000)
+        
+        r1, r2 = self.get_orbit_r(ang)
+        
+        x1 = r1*np.cos(ang)
+        y1 = r1*np.sin(ang)
+        x2 = r2*np.cos(ang)
+        y2 = r2*np.sin(ang)
+        
+        #Finally we compute the coordinates of the orbit crossing
+        xc1 = self.rc[0]*np.cos(self.phic[0])
+        yc1 = self.rc[0]*np.sin(self.phic[0])
+        
+        xc2 = self.rc[1]*np.cos(self.phic[1])
+        yc2 = self.rc[1]*np.sin(self.phic[1])
+        
+        fig, ax = plt.subplots(figsize=(8,6))
+        
+        ax.plot(x1,y1,'b-',label='$\mathrm{Orbit\ 1}$')
+        ax.plot(x2,y2,'r-',label='$\mathrm{Orbit\ 2}$')
+        ax.plot(0,0,marker='+',color='tab:gray',ms=10)
+        ax.plot(xc1,yc1,'k+',markersize=7,label='$r_1 = r_2$')
+        ax.text(xc1-0.1,yc1+0.1,'$\mathrm{A}$')
+        ax.plot(xc2,yc2,'k+',markersize=7) #Due to symmetry, we get two crossings
+        ax.text(xc2-0.1,yc2-0.2,'$\mathrm{B}$')
+        
+        ax.set_aspect('equal')
+        
+        xmax = int(np.ceil(np.amax(np.absolute([x1,x2]))))
+        ymax = int(np.ceil(np.amax(np.absolute([x1,x2]))))
+        
+        ax.set_xlim(-xmax,xmax)
+        ax.set_ylim(-ymax,ymax)
+        ax.set_yticks(np.arange(-ymax,ymax+1,1,dtype=int))
+        ax.set_xlabel('$x\ \mathrm{[AU]}$')
+        ax.set_ylabel('$y\ \mathrm{[AU]}$')
+        
+        ax.legend(prop={'size':13})
+        
+        self.add_ptable(ax)
+        add_date(fig)
         
     def plot_vectri(self,planet=1,idx=0):
         """Plots the vector triangle for a given planet after performing a 
@@ -1054,7 +1092,7 @@ class Scatter:
         
         ax.legend()
         
-    def plot_defang_dmin(self):
+    def plot_defang_dmin(self,idx=0):
         """Plots the deflection angle as a function of the impact parameter and
         the minimum distance as a function of the deflection angle"""
         fig, ax = plt.subplots(1,2,sharey=False,figsize=(14,6))
@@ -1070,9 +1108,9 @@ class Scatter:
         anysc  = np.any([anysc1,anysc2],axis=0)
         
         col[anysc] = 'g'
-        col[self.dcrit>=self.dmin] = 'r'
+        col[self.dcrit>=self.dmin[:,idx]] = 'r'
         
-        ax[0].scatter(self.b/self.rjtoau,np.rad2deg(self.defang),c=col,s=2)
+        ax[0].scatter(self.b/self.rjtoau,np.rad2deg(self.defang[:,idx]),c=col,s=2)
         
         ax[0].set_xlabel('$b\ [R_J]$')
         ax[0].set_ylabel(r'$\delta\ [\degree]$')
@@ -1085,7 +1123,7 @@ class Scatter:
         
         #We also plot the minimum distance as a function of the deflection angle
         
-        ax[1].scatter(np.rad2deg(self.defang),self.dmin/self.rjtoau,c=col,s=2)
+        ax[1].scatter(np.rad2deg(self.defang[:,idx]),self.dmin[:,idx]/self.rjtoau,c=col,s=2)
         
         ax[1].set_ylabel('$d_{min}\ [R_J]$')
         ax[1].set_xlabel(r'$\delta\ [\degree]$')
@@ -1114,9 +1152,9 @@ class Scatter:
         col2 = np.asarray(['k']*np.size(bvals))
         
         col1[self.scoll[:,0,idx]] = 'g'
-        col1[self.dcrit>=self.dmin] = 'r'
+        col1[self.merger[:,0]] = 'r'
         col2[self.scoll[:,1,idx]] = 'g'
-        col2[self.dcrit>=self.dmin] = 'r'
+        col2[self.merger[:,1]] = 'r'
         #We then set up the plotting parameters
         
         xmax1 = np.amax(self.at1[:,idx])+0.1*np.amax(self.at1[:,idx])
@@ -1198,8 +1236,8 @@ class Scatter:
         #between the planets, which are given by bmin and bmax
         
         if np.any(self.dcrit>=self.dmin):
-            bmin = self.b[self.dcrit>=self.dmin].min()
-            bmax = self.b[self.dcrit>=self.dmin].max()
+            bmin = self.b[self.dcrit>=self.dmin[:,idx]].min()
+            bmax = self.b[self.dcrit>=self.dmin[:,idx]].max()
         else:
             bmin = 0
             bmax = 0
