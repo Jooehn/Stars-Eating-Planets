@@ -196,7 +196,7 @@ for k in range(N_sim):
     simdata.append(orb_data)
     ce_simdata.append(ce_data)
     
-    call['rm','*.pk1']
+    call(['find',os.getcwd(),'-maxdepth','1','-type','f','-name','*.pk1','-delete'])
 
     #With the help of pandas, we can create a nicely formatted file with all the info
     #we need to find possible outlier simulations
