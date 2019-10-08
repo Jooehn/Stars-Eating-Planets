@@ -19,8 +19,8 @@ plt.close('all')
 
 rjtoau = 1/2150
 metoms = 1/332946
-a1, a2 = 1.0,1.1
-e1, e2 = 0.0,0.8
+a1, a2 = 1,0.3
+e1, e2 = 0.0,0.9
 m1, m2 = 300*metoms, metoms
 p1data = np.array([a1,e1,m1])
 p2data = np.array([a2,e2,m2])
@@ -55,10 +55,10 @@ SC.plot_orbit()
 
 #We can also plot the resulting orbital elements after a scatterings with a set
 #of bvals given in an interval
-#bmax = SC.rc[0]
-bmax = 0.01
-bvals = np.linspace(-bmax,bmax,1e3)
-SC.plot_new_orb(bvals,1)
-SC.plot_defang_dmin()
+#bmax = 0.02
+bmax = SC.find_bmax()
+bvals = np.linspace(-bmax,bmax,1000)
+SC.plot_new_orb(bvals,0)
+#SC.plot_defang_dmin()
 
 #dmin = SC.test_bvals()

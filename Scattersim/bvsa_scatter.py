@@ -33,9 +33,9 @@ Mstar = 1
 metoms = 1/332946
 rjtoau = 1/2150
 
-a1     = 1
-e1, e2 = 0.0,0.88
-m1, m2 = 300*metoms, 300*metoms
+a1     = 10
+e1, e2 = 0.0,0.9
+m1, m2 = 300*metoms, metoms
 
 #We set up a set of a values which we will investigate by setting up the values
 #of our planets for each iteration.

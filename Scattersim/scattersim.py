@@ -45,7 +45,7 @@ class Scatter:
         self.q     = self.pdata[:,2]/M_star
         
         if not self.cross_check():
-            raise Exception('The orbits do not cross at any point')
+            raise ValueError('The orbits do not cross')
         
         self.get_isec()
         self.calc_v()
@@ -65,9 +65,11 @@ class Scatter:
         
     def calc_rhill(self):
         """Computes the Hill radius at the point where the orbits cross"""
-        _,e,m,_ = self.pdata.T
+        a,e,m,_ = self.pdata.T
         
         self.Rhill = self.rc[:,None]*(m/(3*self.M_s))**(1/3)
+        
+        self.Rhill_mut = (m.sum()/self.M_s)**(1/3)*a.sum()*0.5
         
     def get_orbit_r(self,ang1,ang2=None):
         
@@ -96,10 +98,14 @@ class Scatter:
         if a1>a2:
             if (a1*(1-e1)) > (a2*(1+e2)):
                 return False
+            elif np.allclose((a1*(1-e1)),(a2*(1+e2))):
+                return False
         elif a1<a2:
             if (a1*(1+e1)) < (a2*(1-e2)):
                 return False
-        
+            elif np.allclose((a1*(1+e1)),(a2*(1-e2))):
+                return False
+            
         return True
     
     def get_isec(self):
@@ -134,8 +140,8 @@ class Scatter:
         if any(np.isclose(rdiff,0)):
             cidx = np.where(np.isclose(rdiff,0))[0]
             if np.size(cidx)==2:
-                self.phic[0] += ang[cidx[0]],ang[cidx[0]]
-                self.phic[1] += ang[cidx[1]],ang[cidx[1]]
+                self.phic[0] += ang[cidx[0]]#,ang[cidx[0]]
+                self.phic[1] += ang[cidx[1]]#,ang[cidx[1]]
                 done = True
         elif not done:
             #We find the sign for each element and use np.roll to find the two points
@@ -156,7 +162,7 @@ class Scatter:
             if np.size(scidx)==2:
                 cidx = scidx
             elif np.size(scidx)==0:
-                raise Exception('The orbits do not cross')
+                raise ValueError('The orbits do not cross')
             else:
                 cidx = np.append(cidx,scidx)
         
@@ -371,8 +377,8 @@ class Scatter:
         tol = 5e-2
         
         #Our initial guess is 
-        fac = 20
-        bmax_guess = fac*R.max()
+        fac = 0.5
+        bmax_guess = fac*self.Rhill_mut
 
         bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
         
@@ -385,13 +391,13 @@ class Scatter:
         #We can use our self.scoll mask to find if any collisions have occured
         #and can then easily find which systems fulfill our criteria.
         
-        good_range = np.all(det[0][-10:]>tol) or np.all(det[1][-10:]>tol)\
-                    or np.all(det[0][:10]>tol) or np.all(det[1][:10]>tol)
+        good_range = np.all(det[0][-1:]>tol) or np.all(det[1][-1:]>tol)\
+                    or np.all(det[0][:1]>tol) or np.all(det[1][:1]>tol)
 
         while good_range:
-            fac = fac+1
+            fac = fac+0.05
             
-            bmax_guess = fac*R.max()
+            bmax_guess = fac*self.Rhill_mut
             bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
         
             self.scatter(b = bvals)
@@ -399,8 +405,8 @@ class Scatter:
             det[0] = abs(self.et1[:,0]-e[0])
             det[1] = abs(self.et2[:,0]-e[1])
             
-            good_range = np.all(det[0][-10:]>tol) or np.all(det[1][-10:]>tol)\
-                    or np.all(det[0][:10]>tol) or np.all(det[1][:10]>tol)
+            good_range = np.all(det[0][-1:]>tol) or np.all(det[1][-1:]>tol)\
+                    or np.all(det[0][:1]>tol) or np.all(det[1][:1]>tol)
         
         return bmax_guess
         
@@ -544,7 +550,8 @@ class Scatter:
                 
                 try:
                     self.get_isec()
-                except Exception:
+                except ValueError as err:
+                    print(err.args)
                     break
                 
                 #If we get a merger or an ejection we terminate as well
@@ -1276,8 +1283,8 @@ class Scatter:
         ax2.set_xlabel('$b\ [R_J]$')
         ax2.set_ylabel(r'$\tilde{e}$')
 
-#        ax2.set_xlim(-self.b.max()/self.rjtoau,self.b.max()/self.rjtoau)        
-        ax2.set_xlim(-0.01/self.rjtoau,0.01/self.rjtoau)
+        ax2.set_xlim(-self.b.max()/self.rjtoau,self.b.max()/self.rjtoau)        
+#        ax2.set_xlim(-0.01/self.rjtoau,0.01/self.rjtoau)
         ax2.set_ylim(-0.1,1.1)
         
         #Adds grey region representing impact between the planets
