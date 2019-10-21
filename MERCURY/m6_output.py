@@ -190,6 +190,30 @@ def find_nearest(array,value):
     else:
         return idx
 
+def check_ce(big_names):
+    """Checks the output files and determines if there has been a close encounter or not.
+    Returns True for a close encounter and otherwise False."""
+    
+    ce_bool = np.full(len(big_names),False)
+    
+    for i in range(len(big_names)):
+        
+        fname = big_names[i]+'.clo'
+        
+        if is_file_empty(fname):
+            continue
+            
+        ce_data = np.genfromtxt(big_names[i]+'.clo',skip_header=4,dtype=None,encoding=None)
+            
+        for line in ce_data:
+            
+            if line[1] in big_names:
+                
+                ce_bool[i] = True
+                break
+                
+    return np.any(ce_bool)
+
 class m6_analysis:
     
     def __init__(self,m6data):

@@ -31,10 +31,16 @@ rand_big_input(big_names,bigdata)
 #small_input(smalldata)
 small_input()
 
-#If we want randomly generated planets, use the following functions instead
+#If we want randomly generated phases, use the following functions instead
 
 #rand_big_input(bigdata)
 #rand_small_input(smalldata)
+
+#There is also an argument that if True only keeps the run going until we have
+#had at least one host star-planet collision.
+
+until_scol = False
+until_ce   = False
 
 ###################### Simulations ##########################
 
@@ -74,11 +80,6 @@ ce_simdata  = []
 T   = 1e7
 dt  = 1e5
 setup_end_time(dt)
-
-#There is also an argument that if True only keeps the run going until we have
-#had at least one host star-planet collision.
-
-until_scol = False
 
 #We also remove a file that we want to recreate
 
@@ -135,6 +136,19 @@ for k in range(N_sim):
                 continue
             break
         
+        elif until_ce:
+            
+            #If we only want to run until we have a close encounter we enter
+            #this statement
+            call(['./close6'])
+            if check_ce():
+                call(['find',os.getcwd(),'-maxdepth','1','-type','f','-name','*.clo','-delete'])
+                break
+            #If we don't find it, we extend the stop time by dt.
+            else:
+                call(['find',os.getcwd(),'-maxdepth','1','-type','f','-name','*.clo','-delete'])
+                extend_stop_time(dt)
+                t += dt
         else:
             extend_stop_time(dt)
             t+=dt
