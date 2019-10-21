@@ -141,7 +141,7 @@ for k in range(N_sim):
             #If we only want to run until we have a close encounter we enter
             #this statement
             call(['./close6'])
-            if check_ce():
+            if check_ce(big_names):
                 call(['find',os.getcwd(),'-maxdepth','1','-type','f','-name','*.clo','-delete'])
                 break
             #If we don't find it, we extend the stop time by dt.

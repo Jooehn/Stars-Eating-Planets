@@ -123,6 +123,21 @@ def get_end_time():
                 etime = float(estr.strip(end_str))
             
     return etime/365.25
+
+def get_Mstar():
+    
+    """Function that finds the mass of the star in the simulation."""
+    
+    #The string we want to find
+    Mstar_str   = 'central mass (solar) = '
+
+    with open('param.in') as old_file:
+        for line in old_file:
+            if Mstar_str in line:
+                
+                Mstar = float(line.split()[-1])
+            
+    return Mstar
     
 def find_survivors(m6data):
     
@@ -621,3 +636,142 @@ class m6_analysis:
         ax.set_title('$\mathrm{Duration\ of\ stability\ for\ mass\ boosted\ Solar\ System}$')
         ax.set_xlabel(r'$\alpha$')
         ax.set_ylabel(r'$\mathrm{Time\ elapsed\ before\ ejection\ [Myr]}$')
+        
+class m6_ce_analysis:
+    
+    """Class for analysing close encounters between planets in MERCURY simulations."""
+    
+    def __init__(self,m6d,ce_data):
+        
+        self.autoer = 149597900/6371
+        self.Rs     = 1/215
+        self.rcrit  = 3e-2
+        self.simdata = m6d
+        self.ce_data = ce_data
+        self.Mstar   = get_Mstar()
+        
+        if type(ce_data[0][0]) is list:
+            
+            self.K = len(ce_data)
+            self.M = len(ce_data[0])
+            self.N = len(ce_data[0][0])
+        
+            self.fin_phases = np.zeros((self.K,self.M,self.N,8))
+            self.rminvals = np.zeros((self.K,self.N,2))
+        
+        else:
+            
+            self.K = len(ce_data)
+            self.M = 1
+            self.N = len(ce_data[0])
+        
+            self.fin_phases = np.zeros((self.K,self.N,8))
+        
+        self.__get_names()
+        
+    def __get_names(self):
+        
+        with open('big.in','r') as bigfile:
+            
+            biglines = bigfile.readlines()
+            
+        nameid = np.arange(6,len(biglines),4)
+            
+        self.names = [biglines[i].split()[0] for i in nameid]
+        
+    def __get_init_config(self):
+        """Finds the initial phases of the planets in the simulation."""
+        
+        self._init_phases = np.zeros((self.N,8)) 
+        
+        for i in range(self.N):
+            
+            self._init_phases[i] = self.simdata[0][i][0]
+        
+    def __find_bad_runs(self):
+        
+        """Detects any runs with an energy loss above the tolerance value."""
+        
+        etol = 1e-2
+        
+        self.siminfo = np.loadtxt('siminfo.txt',skiprows=1)
+        
+        self._badruns = np.where(self.siminfo[:,5]>etol)[0]
+        
+    def __get_first_ce(self):
+        
+        """Finds the first planet-planet close encounter for each planet"""
+        
+        first_ce = [[] for i in range(self.N)]
+        
+        #First we loop through each simulation
+        for i in range(self.K):
+            
+            #Next we loop over each planet
+            for j in range(self.N):
+                
+                #If we have had close encounters for said planet, we proceed
+                if len(self.ce_data[i][j])!=0:
+                    
+                    #We loop through each encounter
+                    for k in range(len(self.ce_data[i][j])):
+                    
+                        ce = self.ce_data[i][j][k]
+                        
+                        #We save the first recorded planet-planet encounter
+                        if ce[1] in self.names:
+                            
+                            first_ce[j].append(ce)
+                            break
+        
+        self.first_ce = first_ce
+        
+    def plot_first_ce(self):
+        
+        """Plots the eccentricity against the semi-major axis of the secondary
+        planet in a close encounter. Only accounts for the initial orbit crossing."""
+        
+        fig, ax = plt.subplots(figsize=(8,6))
+        
+        #Index zero corresponds to the minor planet
+        for i in range(len(self.first_ce[0])):
+            
+            if len(self.first_ce[0][i])!=0:
+                
+                a2 = self.first_ce[0][i][6]
+                e2 = self.first_ce[0][i][7]
+                
+                ax.plot(a2,e2,color='b',marker='o')#,ms=10,mew=2)
+        
+        ax.set_xlabel('$a_2\ \mathrm{[AU]}$')
+        ax.set_ylabel('$e_2$')
+        ax.set_title('$\mathrm{Secondary\ planet\ orbital\ configuration\ when\ orbits\ cross}$')
+        
+        ax.set_xlim(0.1,10)
+        ax.set_ylim(0,1)
+        ax.set_xscale('log')
+        
+        a1i = self._init_phases[1,1]
+        e1i = self._init_phases[1,2]
+        m1i = self._init_phases[1,-1]
+        a2i = self._init_phases[0,1]
+        e2i = self._init_phases[0,2]
+        m2i = self._init_phases[0,-1]
+        
+        q1i = m1i/self.Mstar
+        q2i = m2i/self.Mstar
+        
+        celldata  = [['{:.2f}'.format(a1i),'{:.2f}'.format(e1i),'{:.0e}'.format(q1i)],\
+                     ['{:.2f}'.format(a2i),'{:.2f}'.format(e2i),'{:.0e}'.format(q2i)]]
+        tabcol    = ['$a\ \mathrm{[AU]}$','$e$','$q$']
+        tabrow    = ['$\mathrm{Orbit\ 1}$','$\mathrm{Orbit\ 2}$']
+        
+        table = ax.table(cellText=celldata,colLabels=tabcol,rowLabels=tabrow,\
+                  loc='top',cellLoc='center')
+        
+        table.set_fontsize(10)
+        
+        table.scale(1, 1.2)
+        
+        yticks = ax.yaxis.get_major_ticks()
+        yticks[-1].label1.set_visible(False)
