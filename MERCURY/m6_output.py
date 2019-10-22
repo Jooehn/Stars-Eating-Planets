@@ -764,6 +764,8 @@ class m6_ce_analysis:
             for j in range(self.N):
                 
                 #If we have had close encounters for said planet, we proceed
+                if type(self.ce_data[i][j])==list:
+                    continue
                 
                 if self.ce_data[i][j].size>1:
                     #We loop through each encounter
