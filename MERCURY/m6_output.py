@@ -241,8 +241,11 @@ def check_ce(big_names):
             ced_list = ce_data.tolist()
             if ced_list[1] in big_names:        
                 
-                a1i = ced_list[3]
-                a2i = ced_list[6]
+                try:
+                    a1i = float(ced_list[3])
+                    a2i = float(ced_list[6])
+                except ValueError:
+                    continue
             
                 Rhill_mut = ((m1i+m2i)/Mstar)**(1/3)*(a1i+a2i)*0.5
                 
@@ -254,8 +257,11 @@ def check_ce(big_names):
                 
                 if line[1] in big_names:
                     
-                    a1i = line[3]
-                    a2i = line[6]
+                    try:
+                        a1i = float(ced_list[3])
+                        a2i = float(ced_list[6])
+                    except ValueError:
+                        break
             
                     Rhill_mut = ((m1i+m2i)/Mstar)**(1/3)*(a1i+a2i)*0.5
                 
@@ -776,8 +782,14 @@ class m6_ce_analysis:
                         #We save the first recorded planet-planet encounter
                         if ce[1] in self.names:
                             
-                            a1i = float(ce[3])
-                            a2i = float(ce[6])
+                            #We make sure that we disregard any cases where
+                            #the system has been ejected from the system which
+                            #gives '*****' in the output
+                            try:
+                                a1i = float(ce[3])
+                                a2i = float(ce[6])
+                            except ValueError:
+                                break
                     
                             Rhill_mut = ((m1i+m2i)/self.Mstar)**(1/3)*(a1i+a2i)*0.5
                             
@@ -790,8 +802,11 @@ class m6_ce_analysis:
                     #We save the first recorded planet-planet encounter
                     if ce[1] in self.names:
                         
-                        a1i = float(ce[3])
-                        a2i = float(ce[6])
+                        try:
+                            a1i = float(ce[3])
+                            a2i = float(ce[6])
+                        except ValueError:
+                            continue
                     
                         Rhill_mut = ((m1i+m2i)/self.Mstar)**(1/3)*(a1i+a2i)*0.5
                         
