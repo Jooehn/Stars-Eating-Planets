@@ -258,8 +258,8 @@ def check_ce(big_names):
                 if line[1] in big_names:
                     
                     try:
-                        a1i = float(ced_list[3])
-                        a2i = float(ced_list[6])
+                        a1i = float(line[3])
+                        a2i = float(line[6])
                     except ValueError:
                         break
             
@@ -693,24 +693,40 @@ class m6_ce_analysis:
         self.ce_data = ce_data
         self.Mstar   = get_Mstar()
         
-        if type(ce_data[0][0]) is list:
-            
-            self.K = len(ce_data)
-            self.M = len(ce_data[0])
-            self.N = len(ce_data[0][0])
-        
-            self.fin_phases = np.zeros((self.K,self.M,self.N,8))
-            self.rminvals = np.zeros((self.K,self.N,2))
-        
-        else:
-            
-            self.K = len(ce_data)
-            self.M = 1
-            self.N = len(ce_data[0])
-        
-            self.fin_phases = np.zeros((self.K,self.N,8))
-        
         self.__get_names()
+        
+        #We check if we have had any collisions at all
+    
+        coll_bool = np.full(len(ce_data),False)
+        for i in range(len(ce_data)):
+            
+            if type(ce_data[i][0]) == np.ndarray:
+                coll_bool[i] = True  
+            elif type(ce_data[i][0][0]) == np.void:
+                coll_bool[i] = True
+            elif type(ce_data[i][0][0]) == np.ndarray:
+                coll_bool[i] = True
+                
+        if not np.any(coll_bool):
+            raise ValueError('No close encounters have been recorded')
+        
+#        if type(ce_data[coll_bool][0][0]) == list:
+#            
+#            self.K = len(ce_data)
+#            self.M = len(ce_data[0])
+#            self.N = len(ce_data[0][0])
+#        
+#            self.fin_phases = np.zeros((self.K,self.M,self.N,8))
+#            self.rminvals = np.zeros((self.K,self.N,2))
+#        
+#        else:
+            
+        self.K = len(ce_data)
+        self.M = 1
+        self.N = len(ce_data[0])
+    
+        self.fin_phases = np.zeros((self.K,self.N,8))
+        
         self.__get_first_ce()
         self.__get_init_config()
         self.__calc_Rhill()
