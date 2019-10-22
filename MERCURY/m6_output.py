@@ -138,6 +138,19 @@ def get_Mstar():
                 Mstar = float(line.split()[-1])
             
     return Mstar
+
+def get_masses():
+    """Finds the masses of the planets in the run"""
+    
+    with open('big.in','r') as bigfile:
+    
+        biglines = bigfile.readlines()
+            
+    nameid = np.arange(6,len(biglines),4)
+            
+    masses = [biglines[i].split()[1].strip('m=') for i in nameid]
+    
+    return np.asarray(masses,dtype=float)
     
 def find_survivors(m6data):
     
@@ -211,6 +224,10 @@ def check_ce(big_names):
     
     ce_bool = np.full(len(big_names),False)
     
+    Mstar = get_Mstar()
+    
+    m1i, m2i = get_masses()
+    
     for i in range(len(big_names)):
         
         fname = big_names[i]+'.clo'
@@ -219,13 +236,33 @@ def check_ce(big_names):
             continue
             
         ce_data = np.genfromtxt(big_names[i]+'.clo',skip_header=4,dtype=None,encoding=None)
-            
-        for line in ce_data:
-            
-            if line[1] in big_names:
+        
+        if ce_data.size==1:
+            ced_list = ce_data.tolist()
+            if ced_list[1] in big_names:        
                 
-                ce_bool[i] = True
-                break
+                a1i = ced_list[3]
+                a2i = ced_list[6]
+            
+                Rhill_mut = ((m1i+m2i)/Mstar)**(1/3)*(a1i+a2i)*0.5
+                
+                if ced_list[2]<=Rhill_mut:    
+                    ce_bool[i] = True
+                
+        elif ce_data.size>1:
+            for line in ce_data:
+                
+                if line[1] in big_names:
+                    
+                    a1i = line[3]
+                    a2i = line[6]
+            
+                    Rhill_mut = ((m1i+m2i)/Mstar)**(1/3)*(a1i+a2i)*0.5
+                
+                    if line[2] <= Rhill_mut:
+                        
+                        ce_bool[i] = True
+                        break
                 
     return np.any(ce_bool)
 
@@ -668,6 +705,9 @@ class m6_ce_analysis:
             self.fin_phases = np.zeros((self.K,self.N,8))
         
         self.__get_names()
+        self.__get_first_ce()
+        self.__get_init_config()
+        self.__calc_Rhill()
         
     def __get_names(self):
         
@@ -698,11 +738,24 @@ class m6_ce_analysis:
         
         self._badruns = np.where(self.siminfo[:,5]>etol)[0]
         
+    def __calc_Rhill(self):
+        
+        a1i = self._init_phases[1,1]
+        e1i = self._init_phases[1,2]
+        m1i = self._init_phases[1,-1]
+        a2i = self._init_phases[0,1]
+        e2i = self._init_phases[0,2]
+        m2i = self._init_phases[0,-1]
+        
+        self.Rhill_mut = ((m1i+m2i)/self.Mstar)**(1/3)*(a1i+a2i)*0.5
+        
     def __get_first_ce(self):
         
         """Finds the first planet-planet close encounter for each planet"""
         
         first_ce = [[] for i in range(self.N)]
+        
+        m1i, m2i = get_masses()
         
         #First we loop through each simulation
         for i in range(self.K):
@@ -711,8 +764,8 @@ class m6_ce_analysis:
             for j in range(self.N):
                 
                 #If we have had close encounters for said planet, we proceed
-                if len(self.ce_data[i][j])!=0:
-                    
+                
+                if self.ce_data[i][j].size>1:
                     #We loop through each encounter
                     for k in range(len(self.ce_data[i][j])):
                     
@@ -721,8 +774,27 @@ class m6_ce_analysis:
                         #We save the first recorded planet-planet encounter
                         if ce[1] in self.names:
                             
+                            a1i = float(ce[3])
+                            a2i = float(ce[6])
+                    
+                            Rhill_mut = ((m1i+m2i)/self.Mstar)**(1/3)*(a1i+a2i)*0.5
+                            
+                            if ce[2]<=Rhill_mut:
+                                first_ce[j].append(ce)
+                                break
+                elif self.ce_data[i][j].size==1:
+
+                    ce = self.ce_data[i][j].tolist()                      
+                    #We save the first recorded planet-planet encounter
+                    if ce[1] in self.names:
+                        
+                        a1i = float(ce[3])
+                        a2i = float(ce[6])
+                    
+                        Rhill_mut = ((m1i+m2i)/self.Mstar)**(1/3)*(a1i+a2i)*0.5
+                        
+                        if ce[2]<=Rhill_mut:
                             first_ce[j].append(ce)
-                            break
         
         self.first_ce = first_ce
         
@@ -741,11 +813,13 @@ class m6_ce_analysis:
                 a2 = self.first_ce[0][i][6]
                 e2 = self.first_ce[0][i][7]
                 
-                ax.plot(a2,e2,color='b',marker='o')#,ms=10,mew=2)
+                if float(e2) < 1:
+                
+                    ax.plot(a2,e2,color='b',marker='o')#,ms=10,mew=2)
         
         ax.set_xlabel('$a_2\ \mathrm{[AU]}$')
         ax.set_ylabel('$e_2$')
-        ax.set_title('$\mathrm{Secondary\ planet\ orbital\ configuration\ when\ orbits\ cross}$')
+#        ax.set_title('$\mathrm{Secondary\ planet\ orbital\ configuration\ when\ orbits\ cross}$')
         
         ax.set_xlim(0.1,10)
         ax.set_ylim(0,1)
