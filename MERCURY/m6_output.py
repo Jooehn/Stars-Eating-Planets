@@ -217,6 +217,19 @@ def find_nearest(array,value):
         return idx-1
     else:
         return idx
+    
+def check_gladman_unstable(a1,a2):
+    """Checks the Gladman stability criterion for a system"""    
+
+    Mstar = get_Mstar()
+    
+    m1, m2 = get_masses()    
+    
+    Lo_mut = ((m1+m2)/(3*Mstar))**(1/3)*(a1+a2)*0.5
+    
+    glad_unst = abs(a2-a1)/Rhill_mut <= 2*np.sqrt(3)
+    
+    return glad_unst
 
 def check_ce(big_names):
     """Checks the output files and determines if there has been a close encounter or not.
@@ -247,7 +260,7 @@ def check_ce(big_names):
                 except ValueError:
                     continue
             
-                Rhill_mut = ((m1i+m2i)/Mstar)**(1/3)*(a1i+a2i)*0.5
+                Rhill_mut = ((m1i+m2i)/(3*Mstar))**(1/3)*(a1i+a2i)*0.5
                 
                 if ced_list[2]<=Rhill_mut:    
                     ce_bool[i] = True
@@ -263,7 +276,7 @@ def check_ce(big_names):
                     except ValueError:
                         break
             
-                    Rhill_mut = ((m1i+m2i)/Mstar)**(1/3)*(a1i+a2i)*0.5
+                    Rhill_mut = ((m1i+m2i)/(3*Mstar))**(1/3)*(a1i+a2i)*0.5
                 
                     if line[2] <= Rhill_mut:
                         
@@ -421,6 +434,10 @@ class m6_analysis:
                             finid = find_nearest(self.simdata[i][j][:,0],self._dlist[d_id,2])
                             
                             self.fin_phases[i][j] = self.simdata[i][j][finid]
+                            
+                        else:
+                            
+                            self.fin_phases[i][j] = self.simdata[i][j][-1]
                 
                 else:
                     for j in range(self.N):
@@ -517,7 +534,8 @@ class m6_analysis:
         
         msize = mvals**(1/3)*500
         
-        avals[self._dlist[:,0].astype(int),self._dlist[:,1].astype(int)] = 0
+        if self._dlist.size > 0:  
+            avals[self._dlist[:,0].astype(int),self._dlist[:,1].astype(int)] = 0
 #        avals[tmask]       = 0
 #        msize[tmask]       = 0
         
@@ -571,7 +589,7 @@ class m6_analysis:
         #We then plot the planets that have been scattered into the star
         
         for j in range(self.K):
-            if (j in self.sclist[0]) & (j not in self._badruns):
+            if (j in self.sclist[0]):
                 
                 sysid = self.sclist[0][self.sclist[0] == j]
                 plaid = self.sclist[1][self.sclist[0] == j]
@@ -581,7 +599,10 @@ class m6_analysis:
                 scc = [clist[i] for i in plaid]
         
                 ax.scatter(scx,sysid+1,s=msizesc[j][plaid],c=scc,zorder=2)
-                ax.axhspan((j+1-0.2),(j+1+0.2),alpha=0.3,color='g',zorder=1)
+                if j in self._badruns:
+                    ax.axhspan((j+1-0.2),(j+1+0.2),alpha=0.3,color='k',zorder=1)
+                else:
+                    ax.axhspan((j+1-0.2),(j+1+0.2),alpha=0.3,color='g',zorder=1)
             elif j in self._badruns:
                 ax.axhspan((j+1-0.2),(j+1+0.2),alpha=0.3,color='k',zorder=1)
                 
@@ -769,7 +790,7 @@ class m6_ce_analysis:
         e2i = self._init_phases[0,2]
         m2i = self._init_phases[0,-1]
         
-        self.Rhill_mut = ((m1i+m2i)/self.Mstar)**(1/3)*(a1i+a2i)*0.5
+        self.Rhill_mut = ((m1i+m2i)/(3*self.Mstar))**(1/3)*(a1i+a2i)*0.5
         
     def __get_first_ce(self):
         
@@ -807,7 +828,7 @@ class m6_ce_analysis:
                             except ValueError:
                                 break
                     
-                            Rhill_mut = ((m1i+m2i)/self.Mstar)**(1/3)*(a1i+a2i)*0.5
+                            Rhill_mut = ((m1i+m2i)/(3*self.Mstar))**(1/3)*(a1i+a2i)*0.5
                             
                             if ce[2]<=Rhill_mut:
                                 first_ce[j].append(ce)
@@ -824,7 +845,7 @@ class m6_ce_analysis:
                         except ValueError:
                             continue
                     
-                        Rhill_mut = ((m1i+m2i)/self.Mstar)**(1/3)*(a1i+a2i)*0.5
+                        Rhill_mut = ((m1i+m2i)/(3*self.Mstar))**(1/3)*(a1i+a2i)*0.5
                         
                         if ce[2]<=Rhill_mut:
                             first_ce[j].append(ce)
@@ -836,7 +857,7 @@ class m6_ce_analysis:
         """Plots the eccentricity against the semi-major axis of the secondary
         planet in a close encounter. Only accounts for the initial orbit crossing."""
         
-        fig, ax = plt.subplots(figsize=(8,6))
+        fig, ax = plt.subplots(figsize=(10,8))
         
         #Index zero corresponds to the minor planet
         for i in range(len(self.first_ce[0])):
@@ -852,7 +873,7 @@ class m6_ce_analysis:
         
         ax.set_xlabel('$a_2\ \mathrm{[AU]}$')
         ax.set_ylabel('$e_2$')
-#        ax.set_title('$\mathrm{Secondary\ planet\ orbital\ configuration\ when\ orbits\ cross}$')
+        ax.set_title('$\mathrm{Secondary\ planet\ orbital\ configuration\ at\ first\ orbit\ crossing}$',pad=50.0)
         
         ax.set_xlim(0.1,10)
         ax.set_ylim(0,1)
@@ -870,7 +891,7 @@ class m6_ce_analysis:
         
         celldata  = [['{:.2f}'.format(a1i),'{:.2f}'.format(e1i),'{:.0e}'.format(q1i)],\
                      ['{:.2f}'.format(a2i),'{:.2f}'.format(e2i),'{:.0e}'.format(q2i)]]
-        tabcol    = ['$a\ \mathrm{[AU]}$','$e$','$q$']
+        tabcol    = ['$a_{init}\ \mathrm{[AU]}$','$e_{init}$','$q$']
         tabrow    = ['$\mathrm{Orbit\ 1}$','$\mathrm{Orbit\ 2}$']
         
         table = ax.table(cellText=celldata,colLabels=tabcol,rowLabels=tabrow,\
