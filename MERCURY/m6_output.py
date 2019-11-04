@@ -519,7 +519,7 @@ class m6_analysis:
         
         self._badruns = np.where(self.siminfo[:,5]>etol)[0]
         
-    def Lovis_plot(self):
+    def Lovis_plot(self,title):
         
         avals = self.fin_phases[:,:,1]
         evals = self.fin_phases[:,:,2]
@@ -627,7 +627,7 @@ class m6_analysis:
 
         ax.set_yticks(np.arange(1,self.K+1))
         ax.set_xscale('log')
-        ax.set_title('$\mathrm{3J+2E\ runs\ evolved\ for\ 10\ Myr}$')
+        ax.set_title(r'$\mathrm{2X+3J\ evolved\ for\ 10\ Myr,\ '+title+'}$')
         ax.set_ylabel(r'$\mathrm{Run\ index}$')
         ax.set_xlabel('$a\ \mathrm{[AU]}$')
         ax.set_xlim(1e-3,1e4)

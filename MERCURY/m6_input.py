@@ -114,9 +114,8 @@ def rand_big_input(names,bigdata):
         Columns:
             
             1: mass of the object
-            2: radius of the object
-            3: density of the object
-            4: semi-major axis in AU
+            2: Distance in Hill radii that yields a close encounter
+            3: semi-major axis in AU
             
     The code generates random properties of the objects from a uniform distribution.
     It yields a new mean anomaly for each body in the system."""
@@ -130,12 +129,14 @@ def rand_big_input(names,bigdata):
         ' epoch (in days) = 0\n',\
         ')---------------------------------------------------------------------\n']
     
+    rho = calc_density(bigdata[:,0])
     ecc = np.random.uniform(0,0.01,size=N)
     i = np.random.uniform(0,5,size=N)
     n = np.random.uniform(0,360,size=N)
     M = np.random.uniform(0,360,size=N)
     p = np.random.uniform(0,360,size=N)
     
+    bigdata = np.insert(bigdata,3,rho,axis=1)
     bigdata = np.insert(bigdata,4,ecc,axis=1)
     bigdata = np.insert(bigdata,5,i,axis=1)
     bigdata = np.insert(bigdata,6,p,axis=1)
@@ -213,6 +214,38 @@ def rand_small_input(smalldata,epochs=[]):
             smallfile.write('  {0: .17E} {1: .17E} {2: .17E}\n'.format(*smalldata[j,2:5]))
             smallfile.write('  {0: .17E} {1: .17E} {2: .17E}\n'.format(*smalldata[j,5:]))
             smallfile.write('   0. 0. 0.\n')
+
+def calc_density(mass):
+    """Calculates the average density of a planet with a given mass using the 
+    mass-radius relations from Tremaine & Dong (2012) for planets above 10 Earth
+    masses and Zeng, Sasselov & Jacobsen (2016) for the planets below 10 Earth 
+    masses. We assume that the planet is a perfect sphere."""
+    
+    rjtoau = 1/2150
+    retoau = rjtoau/11
+    metoms = 1/332946
+    mjtoms = 300/332946
+    mstogr = 1.99e33
+    autocm = 1.496e13
+    
+    rhovals = []
+    for m in mass:
+        
+        #We use the TD12 mass-relation for planets more massive than super-Earths
+        #and the ZSJ16 mass-relation for rocky planets
+        if m >= (10/300)*mjtoms:
+            #Mass in Jupiter masses
+            R = 10**(0.087+0.141*np.log10(m*1e3)-0.171*np.log10(m*1e3)**2)*rjtoau 
+        else:
+            #Mass in Earth masses
+            CMF = 0.33 #Core mass fraction of Earth
+            R = (1.07-0.21*CMF)*(m/metoms)**(1/3.7)*retoau
+    
+        V = 4*np.pi*(R*autocm)**3/3
+        rho = m*mstogr/V
+        rhovals.append(rho)
+
+    return rhovals
             
 def mass_boost(alpha):
     
