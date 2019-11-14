@@ -3,7 +3,7 @@ Created on Tue Mar 26 13:22:07 2019
 
 @author: John Wimarsson
 
-Script that generates new velocities for two planets that undergo scattering.
+Script that generates new orbital parameters for two planets that undergo scattering.
 
 The main purpose of this code is to restrict the parameter space for which
 a planet-host star collision becomes more probable. We have included two major
@@ -21,27 +21,34 @@ from smooth_1d import smooth
 
 class Scatter:
     def __init__(self,p1data,p2data,M_star,R_star,theta=0):
-    
+        
+        #We first initialise our constants
         self.M_s    = M_star
         self.G      = 4*np.pi**2
         self.theta  = np.deg2rad(theta)
+        self.metoms = 1/332946
+        self.mjtoms = 300*self.metoms
         self.rjtoau = 1/2150
+        self.retoau = self.rjtoau/11
         self.rstoau = 1/215
         self.rjtors = self.rjtoau/self.rstoau
-        #We use the empirical limit for tidal interaction (Beaugé & Nesvorný, 2012)
-        #as our critical radius
-        self.rcrit  = 6*R_star
-        self.R_star = R_star
         
         kmtoau = 1/149597900
         kmstoauyr = (3600*24*365.25)*kmtoau 
         self.auyrtokms = 1/kmstoauyr
         
+        #We set the critical radius to the physical radius of the host star
+        self.R_star = (M_star)**0.8*self.rstoau
+        self.rcrit  = R_star
+        
+        #Next we save the planet data in a container
         self.pdata = np.vstack([p1data,p2data])
         
-        self.calc_radius()
+        #We also compute the radius for the planets
+        self.calc_planet_radius()
         
-        self.dcoll = self.pdata[0,3] + self.pdata[1,3]
+        #This allows us to define the critical distance for planet-planet collision
+        self.dcoll = self.pdata[:,3].sum()
         self.q     = self.pdata[:,2]/M_star
         
         if not self.cross_check():
@@ -53,15 +60,25 @@ class Scatter:
         
         self.dcrit = self.dcoll
         
-    def calc_radius(self):
+    def calc_planet_radius(self):
         """Calculates the radius of a planet with a given mass using the 
-        mass-radius relation from Tremaine & Dong (2012)"""
-        m1,m2 = self.pdata.T[2]*1e3
+        mass-radius relations from Tremaine & Dong (2012) and Zeng, Sasselov &
+        Jacobsen (2016)."""
+        m1,m2 = self.pdata.T[2]
         
-        r1 = 10**(0.087+0.141*np.log10(m1)-0.171*np.log10(m1)**2)*self.rjtoau 
-        r2 = 10**(0.087+0.141*np.log10(m2)-0.171*np.log10(m2)**2)*self.rjtoau 
-        
-        self.pdata = np.insert(self.pdata,3,[r1,r2],axis=1)
+        Rvals = []
+        for m in [m1,m2]:
+            #We use the TD12 mass-relation for our planets if they are above 2.62
+            #Earth masses
+            if m>=2.62*self.metoms:
+                R = 10**(0.087+0.141*np.log10(m/self.mjtoms)-0.171*np.log10(m/self.mjtoms)**2)*self.rjtoau 
+            else:
+                CMF = 0.33 #Core mass fraction of the Earth
+                
+                R = (1.07-0.21*CMF)*(m/self.metoms)**(1/3.7)*self.retoau
+            Rvals.append(R)
+
+        self.pdata = np.insert(self.pdata,3,Rvals,axis=1)
         
     def calc_rhill(self):
         """Computes the Hill radius at the point where the orbits cross"""
@@ -69,10 +86,10 @@ class Scatter:
         
         self.Rhill = self.rc[:,None]*(m/(3*self.M_s))**(1/3)
         
-        self.Rhill_mut = (m.sum()/self.M_s)**(1/3)*a.sum()*0.5
+        self.Rhill_mut = (m.sum()/(3*self.M_s))**(1/3)*a.sum()*0.5
         
     def get_orbit_r(self,ang1,ang2=None):
-        
+        """Computes the r-values for each point on an orbit"""
         if ang2 is None:
             ang2 = ang1-self.theta
         
@@ -175,7 +192,8 @@ class Scatter:
             #We then have everything we need to find our crossing angles
             self.phic = (m2-m1)/(k1-k2)
         
-        #Formula from Windmark (2009)
+        #We also compute and save the distance between the orbits crossings and
+        #the host star
         self.rc = (a1*(1-e1**2))/(1+e1*np.cos(self.phic))
         
     def calc_v(self):
@@ -335,32 +353,30 @@ class Scatter:
             print('dE or dL is not conserved')
             
         #We also check if the new orbital parameters will bring the stars close
-        #enough to the star. The limit for tidal interaction has empirically
-        #been found to be approximately 0.03 AU (Beaugé & Nesvorný, 2012).
+        #enough to the star for a collision.
         
         self.rmin = np.zeros((np.size(b),2,2))
         self.rmin[:,0] = self.at1*(1-self.et1)
         self.rmin[:,1] = self.at2*(1-self.et2)
         
-#        self.scoll = self.rmin<self.rcrit 
         self.scoll      = np.zeros((np.size(b),2,2),dtype=bool)
         self.scoll[:,0] = (self.rmin[:,0] < self.rcrit) & (self.et1 < 1)
         self.scoll[:,1] = (self.rmin[:,1] < self.rcrit) & (self.et2 < 1)
         
         #We also check which objects have been ejected
-        self.eject      = np.zeros((np.size(b),2,2))
+        self.eject      = np.zeros((np.size(b),2,2),dtype=bool)
         self.eject[:,0,0] = (self.dmin[:,0] > self.dcrit) & (self.et1[:,0] >= 1)
         self.eject[:,0,1] = (self.dmin[:,1] > self.dcrit) & (self.et1[:,1] >= 1)
         self.eject[:,1,0] = (self.dmin[:,0] > self.dcrit) & (self.et2[:,0] >= 1)
         self.eject[:,1,1] = (self.dmin[:,1] > self.dcrit) & (self.et2[:,1] >= 1)
         
-        #And finally the bvalues which lead to mergers
+        #And finally the b-values which lead to mergers
         self.merger       = np.zeros((np.size(b),2),dtype=bool)
         self.merger[:,0]  = self.dmin[:,0] <= self.dcrit
         self.merger[:,1]  = self.dmin[:,1] <= self.dcrit
         
         #We can also compute the critical eccentricity for a given semi-major axis
-        
+        #that will yield a star-planet collision
         self.ecrit      = np.zeros((np.size(b),2,2))
         self.ecrit[:,0] = 1 - self.rcrit/self.at1
         self.ecrit[:,1] = 1 - self.rcrit/self.at2
@@ -377,7 +393,7 @@ class Scatter:
         tol = 5e-2
         
         #Our initial guess is 
-        fac = 0.5
+        fac = 0.25
         bmax_guess = fac*self.Rhill_mut
 
         bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
@@ -388,12 +404,14 @@ class Scatter:
         det[0] = abs(self.et1[:,0]-e[0])
         det[1] = abs(self.et2[:,0]-e[1])
         
-        #We can use our self.scoll mask to find if any collisions have occured
-        #and can then easily find which systems fulfill our criteria.
+        #We check if the values at the edges of our b-value range has changed
+        #less than some tolerance
         
         good_range = np.all(det[0][-1:]>tol) or np.all(det[1][-1:]>tol)\
                     or np.all(det[0][:1]>tol) or np.all(det[1][:1]>tol)
-
+                    
+        #If this is true we are happy with our guess, otherwise we keep iterating
+        #and adjusting the guess until we have a good guess
         while good_range:
             fac = fac+0.05
             
@@ -555,7 +573,7 @@ class Scatter:
                     break
                 
                 #If we get a merger or an ejection we terminate as well
-                if self.dcrit>=dmin:
+                if np.any(self.merger):
                     coll = True
                     break
                 elif et2i>1:
@@ -570,7 +588,7 @@ class Scatter:
                 #We then carry out a new scattering
                 
                 #Uncomment to get new bmax for every scatter
-#                bmax = find_bmax()
+                bmax = self.find_bmax()
                 
                 bn = np.random.uniform(-bmax,bmax)
                 
@@ -886,8 +904,9 @@ class Scatter:
         return dminf
     
     def plot_orbit(self):
-        """Plots the circular and eccentric orbits and marks the point of crossing."""
+        """Plots the two planetary orbits and marks the point of crossing."""
         
+        #We extract the relevant data
         a1, e1, m1, _ = self.pdata[0]
         a2, e2, m2, _ = self.pdata[1]
         
@@ -907,15 +926,16 @@ class Scatter:
         xc2 = self.rc[1]*np.cos(self.phic[1])
         yc2 = self.rc[1]*np.sin(self.phic[1])
         
+        #This can now be plotted in a diagram
         fig, ax = plt.subplots(figsize=(8,6))
         
         ax.plot(x1,y1,'b-',label='$\mathrm{Orbit\ 1}$')
         ax.plot(x2,y2,'r-',label='$\mathrm{Orbit\ 2}$')
         ax.plot(0,0,marker='+',color='tab:gray',ms=10)
         ax.plot(xc1,yc1,'k+',markersize=7,label='$r_1 = r_2$')
-        ax.text(xc1-0.1,yc1+0.1,'$\mathrm{A}$')
-        ax.plot(xc2,yc2,'k+',markersize=7) #Due to symmetry, we get two crossings
-        ax.text(xc2-0.1,yc2-0.2,'$\mathrm{B}$')
+        ax.text(xc1-0.2,yc1+0.1,'$\mathrm{A}$')
+        ax.plot(xc2,yc2,'k+',markersize=7)
+        ax.text(xc2-0.2,yc2-0.3,'$\mathrm{B}$')
         
         ax.set_aspect('equal')
         
@@ -923,8 +943,8 @@ class Scatter:
         ymax = int(np.ceil(np.amax(np.absolute([x1,x2]))))
         
         ax.set_xlim(-xmax,xmax)
-        ax.set_ylim(-ymax,ymax)
-        ax.set_yticks(np.arange(-ymax,ymax+1,1,dtype=int))
+        ax.set_ylim(-xmax,xmax)
+        ax.set_yticks(ax.get_xticks())
         ax.set_xlabel('$x\ \mathrm{[AU]}$')
         ax.set_ylabel('$y\ \mathrm{[AU]}$')
         
@@ -1350,18 +1370,19 @@ class Scatter:
     def add_ptable(self,ax,loc='top'):
         """Adds a table containing relevant properties of the system we are
         investigating"""
+        
         a, e, _, r = self.pdata.T
         celldata  = [[a[0],e[0],'{:.0e}'.format(self.q[0]),'{:.2f}'.format(r[0]/self.rjtoau)],\
                      [a[1],e[1],'{:.0e}'.format(self.q[1]),'{:.2f}'.format(r[1]/self.rjtoau)]]
-        tabcol    = ['$a\ \mathrm{[AU]}$','$e$','$q$','$R\ [R_J]}$']
-        tabrow    = ['$\mathrm{Orbit\ 1}$','$\mathrm{Orbit\ 2}$']
+        tabcol    = ['$a$ [AU]','$e$',r'$q_\star$','R [$R_J$]']
+        tabrow    = ['Orbit 1','Orbit 2']
         
         table = ax.table(cellText=celldata,colLabels=tabcol,rowLabels=tabrow,\
                   loc=loc,cellLoc='center')
         
-        table.set_fontsize(10)
+        table.set_fontsize(11.8)
         
-        table.scale(1, 1.2)
+        table.scale(1, 1.45)
         
         yticks = ax.yaxis.get_major_ticks()
         yticks[-1].label1.set_visible(False)

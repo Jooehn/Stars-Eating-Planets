@@ -13,13 +13,26 @@ from matplotlib.patches import Arc
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+
+#plt.rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+plt.rc('text', usetex=True)
 plt.rcParams['font.size']= 16
 plt.rcParams['xtick.minor.visible'], plt.rcParams['xtick.top'] = True,True
 plt.rcParams['ytick.minor.visible'], plt.rcParams['ytick.right'] = True,True
 plt.rcParams['xtick.direction'], plt.rcParams['ytick.direction'] = 'in','in'
-plt.rcParams['xtick.labelsize'] = plt.rcParams['ytick.labelsize'] = 14
-plt.rcParams['axes.labelsize'] = 18
+plt.rcParams['xtick.labelsize'] = plt.rcParams['ytick.labelsize'] = 16
+plt.rcParams['xtick.major.size'] = plt.rcParams['ytick.major.size'] = 5
+plt.rcParams['xtick.minor.size'] = plt.rcParams['ytick.minor.size'] = 2
+plt.rcParams['axes.labelsize'] = 20
+plt.rcParams['axes.labelweight'] = 'normal'
+plt.rcParams['xtick.major.pad'] = plt.rcParams['xtick.major.pad']= 8
 plt.rcParams['mathtext.fontset'] = 'cm'
+#plt.rcParams['text.latex.preamble'] = [r'\usepackage{sfmath}']
+plt.rcParams['text.latex.preamble']=[r"\usepackage{amsmath}"]
+plt.rc('lines', linewidth=1.75)
+plt.rc('figure',figsize=(8,6))
+plt.rc('font', weight='normal')
+#rc('text', usetex=True)
 
 def add_arrow(line, position=None, direction='right', size=14, color=None):
     #Thanks SO
