@@ -14,7 +14,7 @@ from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
-#plt.rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+plt.rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 plt.rc('text', usetex=True)
 plt.rcParams['font.size']= 16
 plt.rcParams['xtick.minor.visible'], plt.rcParams['xtick.top'] = True,True

@@ -20,7 +20,7 @@ from plotfuncs import *
 from smooth_1d import smooth
 
 class Scatter:
-    def __init__(self,p1data,p2data,M_star,R_star,theta=0):
+    def __init__(self,p1data,p2data,M_star,theta=0):
         
         #We first initialise our constants
         self.M_s    = M_star
@@ -38,8 +38,8 @@ class Scatter:
         self.auyrtokms = 1/kmstoauyr
         
         #We set the critical radius to the physical radius of the host star
-        self.R_star = (M_star)**0.8*self.rstoau
-        self.rcrit  = R_star
+        self.R_s = self.calc_stellar_radius()
+        self.rcrit  = self.R_s*self.rstoau
         
         #Next we save the planet data in a container
         self.pdata = np.vstack([p1data,p2data])
@@ -79,6 +79,27 @@ class Scatter:
             Rvals.append(R)
 
         self.pdata = np.insert(self.pdata,3,Rvals,axis=1)
+        
+    def calc_stellar_radius(self,Z=0.02):
+        """We use the analytical prescription from Tout et al. (1996) (T96) to 
+        estimate the ZAMS radius of our star"""
+        
+        m = self.M_s
+        #We load in the coefficients for the constants
+        C = np.loadtxt('zams_coeff.txt',skiprows=1,delimiter=',',usecols=[1,2,3,4,5])[7:]
+        
+        #We assume Solar metallicity and compute eq. (4) in T96
+        Z_s = 0.02
+    
+        theta = C[:,0]+C[:,1]*np.log10(Z/Z_s)+C[:,2]*np.log10(Z/Z_s)**2+\
+                C[:,3]*np.log10(Z/Z_s)**3+C[:,4]*np.log10(Z/Z_s)**4
+                
+        #We now use equation (2) from T96 to estimate the radius
+        
+        Rzams = (theta[0]*m**2.5 + theta[1]*m**6.5+theta[2]*m**11+theta[3]*m**19+theta[4]*m**19.5)/\
+                (theta[5]+theta[6]*m**2+theta[7]*m**8.5+m**18.5+theta[8]*m**19.5)
+        
+        return Rzams
         
     def calc_rhill(self):
         """Computes the Hill radius at the point where the orbits cross"""
@@ -360,8 +381,14 @@ class Scatter:
         self.rmin[:,1] = self.at2*(1-self.et2)
         
         self.scoll      = np.zeros((np.size(b),2,2),dtype=bool)
-        self.scoll[:,0] = (self.rmin[:,0] < self.rcrit) & (self.et1 < 1)
-        self.scoll[:,1] = (self.rmin[:,1] < self.rcrit) & (self.et2 < 1)
+        self.scoll[:,0,0] = (self.rmin[:,0,0] <= self.rcrit) & (self.et1[:,0] < 1) &\
+                            (self.dmin[:,0] > self.dcrit)
+        self.scoll[:,0,1] = (self.rmin[:,0,1] <= self.rcrit) & (self.et1[:,1] < 1) &\
+                            (self.dmin[:,1] > self.dcrit)
+        self.scoll[:,1,0] = (self.rmin[:,1,0] <= self.rcrit) & (self.et2[:,0] < 1) &\
+                            (self.dmin[:,0] > self.dcrit)
+        self.scoll[:,1,1] = (self.rmin[:,1,1] <= self.rcrit) & (self.et2[:,1] < 1) &\
+                            (self.dmin[:,1] > self.dcrit)
         
         #We also check which objects have been ejected
         self.eject      = np.zeros((np.size(b),2,2),dtype=bool)
@@ -1164,7 +1191,7 @@ class Scatter:
         
 #        fig.subplots_adjust(left=0.2,bottom=0.2)
         
-    def plot_new_orb(self,bvals,idx):
+    def plot_new_orb(self,bvals=None,idx=0):
         """Plots the new orbital elements after scattering"""
         
         #We save the combined radius of the planets to set up a check for 
@@ -1253,8 +1280,8 @@ class Scatter:
         
         fig2, ax2 = plt.subplots(figsize=(10,6))
 
-        orb1, = ax2.plot(self.b/self.rjtoau,self.et1[:,idx],color='b',label='$\mathrm{Orbit\ 1}$')
-        orb2, = ax2.plot(self.b/self.rjtoau,self.et2[:,idx],color='r',label='$\mathrm{Orbit\ 2}$')             
+        orb1, = ax2.plot(self.b/self.Rhill_mut,self.et1[:,idx],color='b',label='$\mathrm{Orbit\ 1}$')
+        orb2, = ax2.plot(self.b/self.Rhill_mut,self.et2[:,idx],color='r',label='$\mathrm{Orbit\ 2}$')             
         
         #We add a line representing the critical eccentricity for collision with
         #the Sun given the new semi-major axis produced by given impact parameter
@@ -1269,27 +1296,27 @@ class Scatter:
             bmin = 0
             bmax = 0
         
-        elim1, = ax2.plot(self.b/self.rjtoau,self.ecrit[:,0,idx],'b--',alpha=0.5,\
+        elim1, = ax2.plot(self.b/self.Rhill_mut,self.ecrit[:,0,idx],'b--',alpha=0.5,\
                  label=r'$e_{1,crit}$')
-        elim2, = ax2.plot(self.b/self.rjtoau,self.ecrit[:,1,idx],'r--',alpha=0.5,\
+        elim2, = ax2.plot(self.b/self.Rhill_mut,self.ecrit[:,1,idx],'r--',alpha=0.5,\
                  label=r'$e_{2,crit}$')
         
         et1mask = (self.ecrit[:,0,idx]<=self.et1[:,idx]) & (self.et1[:,idx]<1)
         et2mask = (self.ecrit[:,1,idx]<=self.et2[:,idx]) & (self.et2[:,idx]<1) 
         
         #We create the shaded region for orbit 1
-        ax2.fill_between(self.b[self.b<=bmin]/self.rjtoau,self.ecrit[:,0,idx][self.b<=bmin]\
+        ax2.fill_between(self.b[self.b<=bmin]/self.Rhill_mut,self.ecrit[:,0,idx][self.b<=bmin]\
                          ,self.et1[:,idx][self.b<=bmin],alpha=0.6,\
                          where=et1mask[self.b<=bmin],color='g')
-        ax2.fill_between(self.b[self.b>=bmax]/self.rjtoau,self.ecrit[:,0,idx][self.b>=bmax],\
+        ax2.fill_between(self.b[self.b>=bmax]/self.Rhill_mut,self.ecrit[:,0,idx][self.b>=bmax],\
                          self.et1[:,idx][self.b>=bmax],alpha=0.6,\
                          where=et1mask[self.b>=bmax],color='g')
         
         #We do the same for the second orbit
-        ax2.fill_between(self.b[self.b<=bmin]/self.rjtoau,self.ecrit[:,1,idx][self.b<=bmin]\
+        ax2.fill_between(self.b[self.b<=bmin]/self.Rhill_mut,self.ecrit[:,1,idx][self.b<=bmin]\
                          ,self.et2[:,idx][self.b<=bmin],alpha=0.6,\
                          where=et2mask[self.b<=bmin],color='g')
-        ax2.fill_between(self.b[self.b>=bmax]/self.rjtoau,self.ecrit[:,1,idx][self.b>=bmax],\
+        ax2.fill_between(self.b[self.b>=bmax]/self.Rhill_mut,self.ecrit[:,1,idx][self.b>=bmax],\
                          self.et2[:,idx][self.b>=bmax],alpha=0.6,\
                          where=et2mask[self.b>=bmax],color='g')
         
@@ -1300,15 +1327,15 @@ class Scatter:
         box = ax2.get_position()
         ax2.set_position([box.x0, box.y0, box.width * 0.95, box.height])    
         
-        ax2.set_xlabel('$b\ [R_J]$')
+        ax2.set_xlabel('$b\ [R_\mathrm{Hill,m}]$')
         ax2.set_ylabel(r'$\tilde{e}$')
 
-        ax2.set_xlim(-self.b.max()/self.rjtoau,self.b.max()/self.rjtoau)        
-#        ax2.set_xlim(-0.01/self.rjtoau,0.01/self.rjtoau)
+        ax2.set_xlim(-0.2,0.2)        
+#        ax2.set_xlim(-0.01/self.Rhill_mut,0.01/self.Rhill_mut)
         ax2.set_ylim(-0.1,1.1)
         
         #Adds grey region representing impact between the planets
-        gzone = ax2.axvspan(bmin/self.rjtoau,bmax/self.rjtoau,alpha=0.75,color='tab:grey',zorder=-1,\
+        gzone = ax2.axvspan(bmin/self.Rhill_mut,bmax/self.Rhill_mut,alpha=0.75,color='tab:grey',zorder=-1,\
                             label='$d_{min}\leq d_{crit}$')
         
         if np.any(self.scoll):
@@ -1321,42 +1348,45 @@ class Scatter:
         self.add_ptable(ax2)
         add_date(fig2)
         
+        #We plot the minimum radius to the star as a function of impact parameter
+        
         fig3, ax3 = plt.subplots(figsize=(10,6))
         
-        rmin1, = ax3.plot(self.b/self.rjtoau,self.rmin[:,0,idx]/self.rstoau,\
+        rmin1, = ax3.plot(self.b/self.Rhill_mut,self.rmin[:,0,idx]/self.rstoau,\
                           label='$\mathrm{Orbit\ 1}$',color='b')
-        rmin2, = ax3.plot(self.b/self.rjtoau,self.rmin[:,1,idx]/self.rstoau,\
+        rmin2, = ax3.plot(self.b/self.Rhill_mut,self.rmin[:,1,idx]/self.rstoau,\
                           label='$\mathrm{Orbit\ 2}$',color='r')
         
-        rcrit = ax3.axhline(self.rcrit/self.rstoau,linestyle='--',label='$r_{crit}$',\
-                             color='tab:gray')
+        #We only use this line if we have r_crit != R_star
+#        rcrit = ax3.axhline(self.rcrit/self.rstoau,linestyle='--',label='$r_{crit}$',\
+#                             color='tab:gray')
         
-        ax3.axhline(self.R_star/self.rstoau,linestyle='--',label='$R_\star$',\
+        rcrit = ax3.axhline(self.R_s,linestyle='--',label='$R_\star$',\
                              color='black',alpha=0.8)
         
         rcrits = np.asarray([self.rcrit]*len(self.b))/self.rstoau
         
-        ax3.fill_between(self.b[self.b<=bmin]/self.rjtoau,rcrits[self.b<=bmin]\
+        ax3.fill_between(self.b[self.b<=bmin]/self.Rhill_mut,rcrits[self.b<=bmin]\
                          ,self.rmin[:,0,idx][self.b<=bmin]/self.rstoau,alpha=0.6,\
                          where=et1mask[self.b<=bmin],color='g')
-        ax3.fill_between(self.b[self.b>=bmax]/self.rjtoau,rcrits[self.b>=bmax]\
+        ax3.fill_between(self.b[self.b>=bmax]/self.Rhill_mut,rcrits[self.b>=bmax]\
                          ,self.rmin[:,0,idx][self.b>=bmax]/self.rstoau,alpha=0.6,\
                          where=et1mask[self.b>=bmax],color='g')
         #We do the same for the second orbit
-        ax3.fill_between(self.b[self.b<=bmin]/self.rjtoau,rcrits[self.b<=bmin]\
+        ax3.fill_between(self.b[self.b<=bmin]/self.Rhill_mut,rcrits[self.b<=bmin]\
                          ,self.rmin[:,1,idx][self.b<=bmin]/self.rstoau,alpha=0.6,\
                          where=et2mask[self.b<=bmin],color='g')
-        ax3.fill_between(self.b[self.b>=bmax]/self.rjtoau,rcrits[self.b>=bmax]\
+        ax3.fill_between(self.b[self.b>=bmax]/self.Rhill_mut,rcrits[self.b>=bmax]\
                          ,self.rmin[:,1,idx][self.b>=bmax]/self.rstoau,alpha=0.6,\
                          where=et2mask[self.b>=bmax],color='g')
         
-        ax3.axvspan(bmin/self.rjtoau,bmax/self.rjtoau,alpha=0.75,color='tab:grey',zorder=-1,\
+        ax3.axvspan(bmin/self.Rhill_mut,bmax/self.Rhill_mut,alpha=0.75,color='tab:grey',zorder=-1,\
                         label='$d_{min}\leq d_{crit}$')
         
-        ax3.set_xlabel('$b\ [R_J]$')
+        ax3.set_xlabel('$b\ [R_\mathrm{Hill,m}]$')
         ax3.set_ylabel(r'$r_{min}\ [R_\odot]$')
         
-        ax3.set_xlim(-0.01/self.rjtoau,0.01/self.rjtoau)
+        ax3.set_xlim(-0.2,0.2)
 #        ax3.set_ylim(0,2/self.rstoau)
         ax3.set_yscale('log')
         
