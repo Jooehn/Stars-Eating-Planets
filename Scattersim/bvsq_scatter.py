@@ -18,7 +18,7 @@ plt.close('all')
 
 rjtoau = 1/2150
 
-a1, a2 = 1.0,1.1
+a1, a2 = 1.0,0.9
 e1, e2 = 0.0,0.9
 
 #We set up the class object with orbits corresponding to the given parameters
@@ -34,7 +34,7 @@ Mstar = 1
 
 earthtosunm = 1/332946
 
-N_mvals = 500
+N_mvals = 300
 qvals = np.logspace(np.log10(1/300),np.log10(300),N_mvals)
 
 #The total mass of the planets is mtot
@@ -47,10 +47,7 @@ m1vals *= earthtosunm
 m2vals *= earthtosunm
 
 #Set up a few empty containers
-qmask11   = np.full(len(qvals),False)
-qmask12   = np.full(len(qvals),False)
-qmask21   = np.full(len(qvals),False)
-qmask22   = np.full(len(qvals),False)
+bmvals    = np.zeros(len(qvals))
 
 #We then loop through all our q-values and save the points for which the upper
 #and lower points in b for both of our orbital collision points.
@@ -70,11 +67,15 @@ for i in range(len(qvals)):
     SC = Scatter(p1data,p2data,Mstar,theta=theta)
     
     #We define a set of bvals for which we will evaluate for each qstar
-    bmax  = SC.find_bmax()
+    bmax  = SC.find_bmax(fac=0.01,step=0.001)
+    bmvals[i] = bmax/SC.Rhill_mut
     bvals = np.linspace(-bmax,bmax,int(1e4)) 
     
     #We perform the scatterings
-    SC.scatter(b=bvals)
+    try:
+        SC.scatter(b=bvals)
+    except ValueError:
+        pass
     
     #Next we find which planets have critically interacted with the host star
     #as well as which ones have collided
@@ -87,32 +88,38 @@ for i in range(len(qvals)):
     
     qp = np.asarray([qvals[i]]*len(bvals))
 
-    ds = 10
-    scim = ax.scatter(qp[mask11],bvals[mask11]/SC.Rhill_mut,c=SC.et1[:,0][mask11],s=ds,\
+    ds = 5
+    scim = ax.scatter(qp[mask11],bvals[mask11]/bmax,c=SC.et1[:,0][mask11],s=ds,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
-    ax.scatter(qp[mask12],bvals[mask12]/SC.Rhill_mut,c=SC.et1[:,1][mask12],s=ds,\
+    ax.scatter(qp[mask12],bvals[mask12]/bmax,c=SC.et1[:,1][mask12],s=ds,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
-    ax.scatter(qp[mask21],bvals[mask21]/SC.Rhill_mut,c=SC.et2[:,0][mask21],s=ds,\
+    ax.scatter(qp[mask21],bvals[mask21]/bmax,c=SC.et2[:,0][mask21],s=ds,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
-    ax.scatter(qp[mask22],bvals[mask22]/SC.Rhill_mut,c=SC.et2[:,1][mask22],s=ds,\
+    ax.scatter(qp[mask22],bvals[mask22]/bmax,c=SC.et2[:,1][mask22],s=ds,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
     
-    ax.scatter(qp[mask12],bvals[mask12]/SC.Rhill_mut,c=SC.et1[:,0][mask12],s=20,alpha=0,hatch='/')
-    ax.scatter(qp[mask22],bvals[mask22]/SC.Rhill_mut,s=20,alpha=0,hatch='/')
+    ax.scatter(qp[mask12],bvals[mask12]/bmax,c=SC.et1[:,0][mask12],s=10,alpha=0,hatch='/')
+    ax.scatter(qp[mask22],bvals[mask22]/bmax,s=10,alpha=0,hatch='/')
 
 #We also make a legend handle
 ghand = plt.Rectangle((0, 0), 1, 1, fc="darkgreen",label=r'$e_{i,crit}<\tilde{e}_i<1$')
-mhand = plt.Rectangle((0, 0), 1, 1, fc="tab:gray",label=r'$d_{min}\leq d_{crit}$')
 hhand1 = plt.Rectangle((0, 0), 1, 1, fc="None",ec='k',label='$\mathrm{Orbit\ crossing\ A}$')
 hhand2 = plt.Rectangle((0, 0), 1, 1, fc="None",ec='k',hatch='/',label='$\mathrm{Orbit\ crossing\ B}$')
 #
-ax.set_xscale('log')
-ax.set_xlim(qvals.min(),qvals.max())
-ax.set_ylim(-0.07,0.07)
-ax.set_yticks(np.arange(-0.06,0.06+0.02,0.02))
+#ax.set_yticks(np.arange(-ymax,ymax+0.1*ymax,0.1*ymax))
 
 ax.set_xlabel('$q_p$')
-ax.set_ylabel(r'$b\ [R_\mathrm{Hill,m}]$')
+#ax.set_ylabel(r'$b\ [R_\mathrm{Hill,m}]$')
+ax.set_ylabel(r'$b\ [b_\mathrm{max}]$')
+
+#We plot bmax versus Mstar
+#bmplot, = ax.plot(qvals,bmvals,'k--',alpha=0.75,label='$\pm b_\mathrm{max}$')
+#ax.plot(qvals,-bmvals,'k--',alpha=0.75,label='$b_\mathrm{max}$')
+
+ax.set_xlim(qvals.min(),qvals.max())
+ymax = 1
+ax.set_ylim(-ymax,ymax)
+ax.set_xscale('log')
 
 cbar = fig.colorbar(scim,ax=ax,ticks=np.arange(0.8,1+0.05,0.05))
 cbar.ax.set_ylabel(r'$\tilde{e}$')
@@ -134,7 +141,7 @@ datestr = '${0}$-${1}$-${2}$'.format(date.day,date.month,date.year)
 
 #We also add a table
 
-celldata  = [[a1,e1,'$m_1\in[1,300]$'],[a2,e2,'$301-m_1$']]
+celldata  = [[a1,e1,'$301-m_2$'],[a2,e2,'$m_2\in[1,300]$']]
 tabcol    = [r'$a\ \mathrm{[AU]}$','$e$','$m_p\ [M_\oplus]$']
 tabrow    = ['$\mathrm{Orbit\ 1}$','$\mathrm{Orbit\ 2}$']
 
@@ -142,14 +149,17 @@ table = ax.table(cellText=celldata,colLabels=tabcol,rowLabels=tabrow,\
           loc='top',cellLoc='center')
 
 table.set_fontsize(11.8) 
-table.scale(1, 1.45)
+table.scale(1, 1.44)
 
 yticks = ax.yaxis.get_major_ticks()
 yticks[-1].label1.set_visible(False)
 
-ax.legend(handles=[ghand,mhand,hhand1,hhand2],prop={'size':13})
+ax.legend(handles=[ghand,hhand1,hhand2],prop={'size':13})
+
+plt.savefig('zucc_qp_plot_{0}_{1}_{2}.png'.format(date.day,date.month,date.year),dpi=300)
 
 os.chdir(os.getcwd()+'/../../Results/Zucc plots')
-os.chdir(os.getcwd()+'/../../Report/Figures')
 plt.savefig('zucc_qp_plot_{0}_{1}_{2}.png'.format(date.day,date.month,date.year),dpi=300)
+#os.chdir(os.getcwd()+'/../../Report/Figures')
+#plt.savefig('zucc_qp_plot_{0}_{1}_{2}.png'.format(date.day,date.month,date.year),dpi=300)
 plt.close('all')

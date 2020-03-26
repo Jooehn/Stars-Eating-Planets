@@ -87,5 +87,5 @@ date = datetime.datetime.now()
 
 plot_orbit(pdata)
 os.chdir(os.getcwd()+'/../../Report/Figures')
-plt.savefig('orbit_ecc_{0}_{1}_{2}.png'.format(date.day,date.month,date.year),dpi=300)
+plt.savefig('orbit_ecc_{0}_{1}_{2}.pdf'.format(date.day,date.month,date.year))
 plt.close('all')

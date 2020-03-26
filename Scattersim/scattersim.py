@@ -109,14 +109,14 @@ class Scatter:
         
         self.Rhill_mut = (m.sum()/(3*self.M_s))**(1/3)*a.sum()*0.5
         
-    def get_orbit_r(self,ang1,ang2=None):
+    def get_orbit_r(self,ang1,ang2=None,new=False):
         """Computes the r-values for each point on an orbit"""
         if ang2 is None:
             ang2 = ang1-self.theta
         
         a1, e1, m1, _ = self.pdata[0]
         a2, e2, m2, _ = self.pdata[1]
-        
+            
         #We work out the semi-latus rectum
         p1 = a1*(1-e1**2)
         p2 = a2*(1-e2**2)
@@ -222,6 +222,7 @@ class Scatter:
         
         a,e,m,_ = self.pdata.T
         
+        a1, a2 = a
         m1, m2 = m
         
         #We calculate the radial and tangential velocities at the two crossing
@@ -262,8 +263,10 @@ class Scatter:
         self.L1 = m1*self.v1[:,1]*self.rc
         self.L2 = m2*self.v2[:,1]*self.rc
         
-        self.E1 = 0.5*m[0]*v1normsq - self.G*m[0]*self.M_s/self.rc
-        self.E2 = 0.5*m[1]*v2normsq - self.G*m[1]*self.M_s/self.rc
+#        self.E1 = -0.5*self.G*m1*self.M_s/a1
+#        self.E2 = -0.5*self.G*m2*self.M_s/a2
+        self.E1 = 0.5*m1*v1normsq-self.G*m1*self.M_s/self.rc
+        self.E2 = 0.5*m2*v2normsq-self.G*m2*self.M_s/self.rc
         
         self.L = self.L1+self.L2
         self.E = self.E1+self.E2
@@ -371,7 +374,8 @@ class Scatter:
         
         if not np.allclose(self.dL,0) & np.allclose(self.dE,0):
             
-            print('dE or dL is not conserved')
+            raise ValueError('dE or dL is not conserved')
+#            print('dE or dL is not conserved')
             
         #We also check if the new orbital parameters will bring the stars close
         #enough to the star for a collision.
@@ -408,7 +412,7 @@ class Scatter:
         self.ecrit[:,0] = 1 - self.rcrit/self.at1
         self.ecrit[:,1] = 1 - self.rcrit/self.at2
         
-    def find_bmax(self):
+    def find_bmax(self,fac = 0.1,step=0.05):
         """Finds an optimal bmax for the system at hand by requiring that the 
         the outer edges of the range of b-values should be where the change in
         eccentricity due to a scattering at the corresponding b-values should 
@@ -420,7 +424,6 @@ class Scatter:
         tol = 5e-2
         
         #Our initial guess is 
-        fac = 0.25
         bmax_guess = fac*self.Rhill_mut
 
         bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
@@ -440,7 +443,7 @@ class Scatter:
         #If this is true we are happy with our guess, otherwise we keep iterating
         #and adjusting the guess until we have a good guess
         while good_range:
-            fac = fac+0.05
+            fac += step
             
             bmax_guess = fac*self.Rhill_mut
             bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
@@ -452,6 +455,8 @@ class Scatter:
             
             good_range = np.all(det[0][-1:]>tol) or np.all(det[1][-1:]>tol)\
                     or np.all(det[0][:1]>tol) or np.all(det[1][:1]>tol)
+        
+        self.bmax = bmax_guess
         
         return bmax_guess
         
@@ -954,7 +959,57 @@ class Scatter:
         yc2 = self.rc[1]*np.sin(self.phic[1])
         
         #This can now be plotted in a diagram
-        fig, ax = plt.subplots(figsize=(8,6))
+        fig, ax = plt.subplots(figsize=(8,6),dpi=200)
+        
+        ax.plot(x1,y1,'b-',label='$\mathrm{Orbit\ 1}$')
+        ax.plot(x2,y2,'r-',label='$\mathrm{Orbit\ 2}$')
+        ax.plot(0,0,marker='+',color='tab:gray',ms=10)
+        ax.plot(xc1,yc1,'k+',markersize=7,label='$r_1 = r_2$')
+        ax.text(xc1-0.2,yc1+0.1,'$\mathrm{A}$')
+        ax.plot(xc2,yc2,'k+',markersize=7)
+        ax.text(xc2-0.2,yc2-0.3,'$\mathrm{B}$')
+        
+        ax.set_aspect('equal')
+        
+        xmax = int(np.ceil(np.amax(np.absolute([x1,x2]))))
+        ymax = int(np.ceil(np.amax(np.absolute([x1,x2]))))
+        
+        ax.set_xlim(-xmax,xmax)
+        ax.set_ylim(-xmax,xmax)
+        ax.set_yticks(ax.get_xticks())
+        ax.set_xlabel('$x\ \mathrm{[AU]}$')
+        ax.set_ylabel('$y\ \mathrm{[AU]}$')
+        
+        ax.legend(prop={'size':13})
+        
+        self.add_ptable(ax)
+        add_date(fig)
+        
+    def plot_orbit_new(self):
+        """Plots the two planetary orbits and marks the point of crossing."""
+        
+        #We extract the relevant data
+        m1 = self.pdata[0,2]
+        m2 = self.pdata[1,2]
+        
+        ang = np.linspace(0,2*np.pi,1000)
+        
+        r1, r2 = self.get_orbit_r(ang)
+        
+        x1 = r1*np.cos(ang)
+        y1 = r1*np.sin(ang)
+        x2 = r2*np.cos(ang)
+        y2 = r2*np.sin(ang)
+        
+        #Finally we compute the coordinates of the orbit crossing
+        xc1 = self.rc[0]*np.cos(self.phic[0])
+        yc1 = self.rc[0]*np.sin(self.phic[0])
+        
+        xc2 = self.rc[1]*np.cos(self.phic[1])
+        yc2 = self.rc[1]*np.sin(self.phic[1])
+        
+        #This can now be plotted in a diagram
+        fig, ax = plt.subplots(figsize=(8,6),dpi=200)
         
         ax.plot(x1,y1,'b-',label='$\mathrm{Orbit\ 1}$')
         ax.plot(x2,y2,'r-',label='$\mathrm{Orbit\ 2}$')
@@ -1075,8 +1130,8 @@ class Scatter:
 
         #We add information regarding the impact parameter
         xmax = ax.get_xlim()[1]
-        ax.text(xmax+.75,ymax-0.3,'$b =' + '{0:.0f}'.format(self.b/self.rjtoau)+\
-                '\ \mathrm{R}_J$',bbox=dict(facecolor='None', alpha=0.5))
+#        ax.text(xmax+.75,ymax-0.3,'$b =' + '{0:.0f}'.format(self.b/self.rjtoau)+\
+#                '\ \mathrm{R}_J$')#,bbox=dict(facecolor='None', alpha=0.5))
         
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
@@ -1237,7 +1292,7 @@ class Scatter:
             
         #Next, we plot the relevant data
         
-        fig, ax = plt.subplots(1,2,sharey=False,figsize=(12,6))
+        fig, ax = plt.subplots(1,2,sharey=False,figsize=(12,6),dpi=200)
         
         ax[0].scatter(self.at1[:,idx],self.et1[:,idx],s=1,c=col1,marker='o')
         ax[1].scatter(self.at2[:,idx],self.et2[:,idx],s=1,c=col2,marker='o')
@@ -1278,10 +1333,10 @@ class Scatter:
         #We also make a plot with the eccentricities as a function of the 
         #impact parameter b
         
-        fig2, ax2 = plt.subplots(figsize=(10,6))
+        fig2, ax2 = plt.subplots(figsize=(8,6),dpi=200)
 
-        orb1, = ax2.plot(self.b/self.Rhill_mut,self.et1[:,idx],color='b',label='$\mathrm{Orbit\ 1}$')
-        orb2, = ax2.plot(self.b/self.Rhill_mut,self.et2[:,idx],color='r',label='$\mathrm{Orbit\ 2}$')             
+        orb1, = ax2.plot(self.b/self.bmax,self.et1[:,idx],color='b',label='$\mathrm{Orbit\ 1}$')
+        orb2, = ax2.plot(self.b/self.bmax,self.et2[:,idx],color='r',label='$\mathrm{Orbit\ 2}$')             
         
         #We add a line representing the critical eccentricity for collision with
         #the Sun given the new semi-major axis produced by given impact parameter
@@ -1296,27 +1351,27 @@ class Scatter:
             bmin = 0
             bmax = 0
         
-        elim1, = ax2.plot(self.b/self.Rhill_mut,self.ecrit[:,0,idx],'b--',alpha=0.5,\
+        elim1, = ax2.plot(self.b/self.bmax,self.ecrit[:,0,idx],'b--',alpha=0.5,\
                  label=r'$e_{1,crit}$')
-        elim2, = ax2.plot(self.b/self.Rhill_mut,self.ecrit[:,1,idx],'r--',alpha=0.5,\
+        elim2, = ax2.plot(self.b/self.bmax,self.ecrit[:,1,idx],'r--',alpha=0.5,\
                  label=r'$e_{2,crit}$')
         
         et1mask = (self.ecrit[:,0,idx]<=self.et1[:,idx]) & (self.et1[:,idx]<1)
         et2mask = (self.ecrit[:,1,idx]<=self.et2[:,idx]) & (self.et2[:,idx]<1) 
         
         #We create the shaded region for orbit 1
-        ax2.fill_between(self.b[self.b<=bmin]/self.Rhill_mut,self.ecrit[:,0,idx][self.b<=bmin]\
+        ax2.fill_between(self.b[self.b<=bmin]/self.bmax,self.ecrit[:,0,idx][self.b<=bmin]\
                          ,self.et1[:,idx][self.b<=bmin],alpha=0.6,\
                          where=et1mask[self.b<=bmin],color='g')
-        ax2.fill_between(self.b[self.b>=bmax]/self.Rhill_mut,self.ecrit[:,0,idx][self.b>=bmax],\
+        ax2.fill_between(self.b[self.b>=bmax]/self.bmax,self.ecrit[:,0,idx][self.b>=bmax],\
                          self.et1[:,idx][self.b>=bmax],alpha=0.6,\
                          where=et1mask[self.b>=bmax],color='g')
         
         #We do the same for the second orbit
-        ax2.fill_between(self.b[self.b<=bmin]/self.Rhill_mut,self.ecrit[:,1,idx][self.b<=bmin]\
+        ax2.fill_between(self.b[self.b<=bmin]/self.bmax,self.ecrit[:,1,idx][self.b<=bmin]\
                          ,self.et2[:,idx][self.b<=bmin],alpha=0.6,\
                          where=et2mask[self.b<=bmin],color='g')
-        ax2.fill_between(self.b[self.b>=bmax]/self.Rhill_mut,self.ecrit[:,1,idx][self.b>=bmax],\
+        ax2.fill_between(self.b[self.b>=bmax]/self.bmax,self.ecrit[:,1,idx][self.b>=bmax],\
                          self.et2[:,idx][self.b>=bmax],alpha=0.6,\
                          where=et2mask[self.b>=bmax],color='g')
         
@@ -1327,15 +1382,15 @@ class Scatter:
         box = ax2.get_position()
         ax2.set_position([box.x0, box.y0, box.width * 0.95, box.height])    
         
-        ax2.set_xlabel('$b\ [R_\mathrm{Hill,m}]$')
+        ax2.set_xlabel('$b\ [b_\mathrm{max}]$')
         ax2.set_ylabel(r'$\tilde{e}$')
 
-        ax2.set_xlim(-0.2,0.2)        
-#        ax2.set_xlim(-0.01/self.Rhill_mut,0.01/self.Rhill_mut)
+        ax2.set_xlim(-1,1)        
+#        ax2.set_xlim(-0.01/self.bmax,0.01/self.bmax)
         ax2.set_ylim(-0.1,1.1)
         
         #Adds grey region representing impact between the planets
-        gzone = ax2.axvspan(bmin/self.Rhill_mut,bmax/self.Rhill_mut,alpha=0.75,color='tab:grey',zorder=-1,\
+        gzone = ax2.axvspan(bmin/self.bmax,bmax/self.bmax,alpha=0.75,color='tab:grey',zorder=-1,\
                             label='$d_{min}\leq d_{crit}$')
         
         if np.any(self.scoll):
@@ -1350,11 +1405,11 @@ class Scatter:
         
         #We plot the minimum radius to the star as a function of impact parameter
         
-        fig3, ax3 = plt.subplots(figsize=(10,6))
+        fig3, ax3 = plt.subplots(figsize=(8,6),dpi=200)
         
-        rmin1, = ax3.plot(self.b/self.Rhill_mut,self.rmin[:,0,idx]/self.rstoau,\
+        rmin1, = ax3.plot(self.b/self.bmax,self.rmin[:,0,idx]/self.rstoau,\
                           label='$\mathrm{Orbit\ 1}$',color='b')
-        rmin2, = ax3.plot(self.b/self.Rhill_mut,self.rmin[:,1,idx]/self.rstoau,\
+        rmin2, = ax3.plot(self.b/self.bmax,self.rmin[:,1,idx]/self.rstoau,\
                           label='$\mathrm{Orbit\ 2}$',color='r')
         
         #We only use this line if we have r_crit != R_star
@@ -1366,27 +1421,27 @@ class Scatter:
         
         rcrits = np.asarray([self.rcrit]*len(self.b))/self.rstoau
         
-        ax3.fill_between(self.b[self.b<=bmin]/self.Rhill_mut,rcrits[self.b<=bmin]\
+        ax3.fill_between(self.b[self.b<=bmin]/self.bmax,rcrits[self.b<=bmin]\
                          ,self.rmin[:,0,idx][self.b<=bmin]/self.rstoau,alpha=0.6,\
                          where=et1mask[self.b<=bmin],color='g')
-        ax3.fill_between(self.b[self.b>=bmax]/self.Rhill_mut,rcrits[self.b>=bmax]\
+        ax3.fill_between(self.b[self.b>=bmax]/self.bmax,rcrits[self.b>=bmax]\
                          ,self.rmin[:,0,idx][self.b>=bmax]/self.rstoau,alpha=0.6,\
                          where=et1mask[self.b>=bmax],color='g')
         #We do the same for the second orbit
-        ax3.fill_between(self.b[self.b<=bmin]/self.Rhill_mut,rcrits[self.b<=bmin]\
+        ax3.fill_between(self.b[self.b<=bmin]/self.bmax,rcrits[self.b<=bmin]\
                          ,self.rmin[:,1,idx][self.b<=bmin]/self.rstoau,alpha=0.6,\
                          where=et2mask[self.b<=bmin],color='g')
-        ax3.fill_between(self.b[self.b>=bmax]/self.Rhill_mut,rcrits[self.b>=bmax]\
+        ax3.fill_between(self.b[self.b>=bmax]/self.bmax,rcrits[self.b>=bmax]\
                          ,self.rmin[:,1,idx][self.b>=bmax]/self.rstoau,alpha=0.6,\
                          where=et2mask[self.b>=bmax],color='g')
         
-        ax3.axvspan(bmin/self.Rhill_mut,bmax/self.Rhill_mut,alpha=0.75,color='tab:grey',zorder=-1,\
+        ax3.axvspan(bmin/self.bmax,bmax/self.bmax,alpha=0.75,color='tab:grey',zorder=-1,\
                         label='$d_{min}\leq d_{crit}$')
         
-        ax3.set_xlabel('$b\ [R_\mathrm{Hill,m}]$')
+        ax3.set_xlabel('$b\ [b_\mathrm{max}]$')
         ax3.set_ylabel(r'$r_{min}\ [R_\odot]$')
         
-        ax3.set_xlim(-0.2,0.2)
+        ax3.set_xlim(-1,1)
 #        ax3.set_ylim(0,2/self.rstoau)
         ax3.set_yscale('log')
         
@@ -1402,9 +1457,9 @@ class Scatter:
         investigating"""
         
         a, e, _, r = self.pdata.T
-        celldata  = [[a[0],e[0],'{:.0e}'.format(self.q[0]),'{:.2f}'.format(r[0]/self.rjtoau)],\
-                     [a[1],e[1],'{:.0e}'.format(self.q[1]),'{:.2f}'.format(r[1]/self.rjtoau)]]
-        tabcol    = ['$a$ [AU]','$e$',r'$q_\star$','R [$R_J$]']
+        celldata  = [[a[0],e[0],'{:.0e}'.format(self.q[0]),'{:.2f}'.format(r[0]/self.retoau)],\
+                     [a[1],e[1],'{:.0e}'.format(self.q[1]),'{:.2f}'.format(r[1]/self.retoau)]]
+        tabcol    = ['$a$ [AU]','$e$',r'$q_\star$',r'$R_p\ [\mathrm{R}_\oplus]$']
         tabrow    = ['Orbit 1','Orbit 2']
         
         table = ax.table(cellText=celldata,colLabels=tabcol,rowLabels=tabrow,\

@@ -78,6 +78,8 @@ def add_arrow(line, position=None, direction='right', size=14, color=None):
 def add_date(fig,xcoord=0.88):
     """Adds a box with the current date in the upper right corner of
     the figure"""
+    
+    return
 
     date = datetime.datetime.now()
     

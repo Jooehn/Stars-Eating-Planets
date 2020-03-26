@@ -511,7 +511,6 @@ N_scatter = 1000
 
 #We also select our initial parameters for orbit one
 
-#a1 = 0.3
 e1 = 0.0
 m1 = 300*metoms
 #m2 = 1*metoms #Make this an input with the qp factor
@@ -519,9 +518,9 @@ m1 = 300*metoms
 theta = 0
 #We set up containers for our data
     
-#usefulness_vs_qp()
+usefulness_vs_qp()
 #usefulness_vs_qstar(m2=300*metoms)
-plot_usefulness(a1=0.3,m2=metoms,Mstar=10)
+#plot_usefulness(a1=0.3,m2=metoms,Mstar=1)
 #plot_outcome_fractions(a1=0.3,Mstar=10)
 #plot_outcome_fractions_qstar(a1=8)
 #max_usefulness_vs_qp(a1=0.3)
