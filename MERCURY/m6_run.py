@@ -45,7 +45,7 @@ until_ce   = False
 #If we want to continue an already terminated run we can use the continue bool
 #and set it to True
 
-shall_continue = True
+shall_continue = False
 
 #We also choose the number of simulations
 N_sim0 = 0
