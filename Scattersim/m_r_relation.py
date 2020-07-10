@@ -71,7 +71,7 @@ fig, ax = plt.subplots(figsize=(8,7))
 ax.plot(mvals,rvals,'-',zorder=1,color='red')
 ax.plot(mvals_rocky,rvals_rocky,ls = '--',zorder=1,color='blue')
 ax.scatter(pmass,prad,c='k',s=3)
-ax.scatter(m_ss,r_ss,c=c_ss,s=30,zorder=2)
+ax.scatter(m_ss,r_ss,c=c_ss,s=30,zorder=2,edgecolor='k',lw=0.3)
 
 ax.set_xlabel(r'$M_p\ [\mathrm{M}_\oplus]$')
 ax.set_ylabel(r'$R_p\ [\mathrm{R}_\oplus]$')
@@ -105,7 +105,7 @@ prhoc = prho[~prho.mask]
 pmassc = pmass[~prho.mask]
 
 ax2.scatter(pmassc,prhoc,c='k',s=3)
-ax2.scatter(m_ss,rho_ss,c=c_ss,s=30,zorder=2)
+ax2.scatter(m_ss,rho_ss,c=c_ss,s=30,zorder=2,edgecolor='k',lw=0.3)
 
 ax2.set_xlabel(r'$M_p\ [\mathrm{M}_\oplus]$')
 ax2.set_ylabel(r'$\bar{\rho}_p\ [\mathrm{g\ cm}^{-3}]$')

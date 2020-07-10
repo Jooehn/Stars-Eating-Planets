@@ -16,9 +16,9 @@ plt.close('all')
 
 rjtoau = 1/2150
 metoms = 1/332946
-a1, a2 = 1.0,1.1
-e1, e2 = 0.0,0.2
-m1, m2 = metoms, 300*metoms
+a1, a2 = 0.3,0.25
+e1, e2 = 0.0,0.6
+m1, m2 = 300*metoms, metoms
 p1data = np.array([a1,e1,m1])
 p2data = np.array([a2,e2,m2])
 

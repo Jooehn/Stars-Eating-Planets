@@ -11,15 +11,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from scattersim import Scatter
-
-plt.rcParams['font.size']= 16
-plt.rcParams['xtick.minor.visible'], plt.rcParams['xtick.top'] = True,True
-plt.rcParams['ytick.minor.visible'], plt.rcParams['ytick.right'] = True,True
-plt.rcParams['xtick.direction'], plt.rcParams['ytick.direction'] = 'in','in'
-plt.rcParams['xtick.labelsize'] = plt.rcParams['ytick.labelsize'] = 14
-plt.rcParams['axes.labelsize'] = 18
-plt.rcParams['mathtext.fontset'] = 'cm'
-plt.rcParams['hatch.linewidth'] = 2
+from plotfuncs import *
 
 plt.close('all')
 
@@ -85,12 +77,13 @@ for i in range(len(avals)):
     p2data = np.array([a2,e2,m2])    
     
     try:
-        SC = Scatter(p1data,p2data,Mstar,Rstar,theta=theta)
+        SC = Scatter(p1data,p2data,Mstar,theta=theta)
     except Exception:
         continue
     
-    #We perform the scatterings
-    SC.scatter(b=bvals)
+    #We define a set of bvals for which we will evaluate for each qstar
+    bmax  = SC.find_bmax(fac=0.01,step=0.001)
+    bvals = np.linspace(-bmax,bmax,int(1e4)) 
     
     #Next we find which planets have critically interacted with the host star
     #as well as which ones have collided
@@ -120,22 +113,22 @@ for i in range(len(avals)):
     
     ap = np.asarray([avals[i]]*len(bvals))
 
-    scim = ax.scatter(ap[mask11],bvals[mask11]/rjtoau,c=SC.et1[:,0][mask11],s=3,\
+    scim = ax.scatter(ap[mask11],bvals[mask11]/bmax,c=SC.et1[:,0][mask11],s=5,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
-    ax.scatter(ap[mask12],bvals[mask12]/rjtoau,c=SC.et1[:,1][mask12],s=3,\
+    ax.scatter(ap[mask12],bvals[mask12]/bmax,c=SC.et1[:,1][mask12],s=5,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
-    ax.scatter(ap[mask21],bvals[mask21]/rjtoau,c=SC.et2[:,0][mask21],s=3,\
+    ax.scatter(ap[mask21],bvals[mask21]/bmax,c=SC.et2[:,0][mask21],s=5,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
-    ax.scatter(ap[mask22],bvals[mask22]/rjtoau,c=SC.et2[:,1][mask22],s=3,\
+    ax.scatter(ap[mask22],bvals[mask22]/bmax,c=SC.et2[:,1][mask22],s=5,\
                 vmin = 0.8, vmax = 1,cmap='Greens')
    
-    ax.scatter(ap[mask11],bvals[mask11]/rjtoau,c=col1[mask11],s=3)
-    ax.scatter(ap[mask12],bvals[mask12]/rjtoau,c=col1[mask12],s=3)
-    ax.scatter(ap[mask21],bvals[mask21]/rjtoau,c=col2[mask21],s=3)
-    ax.scatter(ap[mask22],bvals[mask22]/rjtoau,c=col2[mask22],s=3)
+#    ax.scatter(ap[mask11],bvals[mask11]/bmax,c=col1[mask11],s=3)
+#    ax.scatter(ap[mask12],bvals[mask12]/bmax,c=col1[mask12],s=3)
+#    ax.scatter(ap[mask21],bvals[mask21]/bmax,c=col2[mask21],s=3)
+#    ax.scatter(ap[mask22],bvals[mask22]/bmax,c=col2[mask22],s=3)
     
-    ax.scatter(ap[mask12],bvals[mask12]/rjtoau,c=SC.et1[:,0][mask12],s=7,alpha=0,hatch='/')
-    ax.scatter(ap[mask22],bvals[mask22]/rjtoau,s=7,alpha=0,hatch='/')
+    ax.scatter(ap[mask12],bvals[mask12]/bmax,c=SC.et1[:,0][mask12],s=10,alpha=0,hatch='/')
+    ax.scatter(ap[mask22],bvals[mask22]/bmax,s=10,alpha=0,hatch='/')
 
 #We also make a legend handle
 ghand = plt.Rectangle((0, 0), 1, 1, fc="tab:green",label=r'$e_{i,crit}<\tilde{e}_i<1$')
@@ -145,7 +138,7 @@ hhand2 = plt.Rectangle((0, 0), 1, 1, fc="None",ec='k',hatch='/',label='$\mathrm{
 
 ax.set_xscale('log')
 ax.set_xlim(avals.min(),avals.max())
-ax.set_ylim(-bmax/rjtoau,bmax/rjtoau)
+ax.set_ylim(-1,1)
 
 ax.set_xlabel('$a_2\ \mathrm{[AU]}$')
 ax.set_ylabel(r'$b\ [\mathrm{R_J}]$')
