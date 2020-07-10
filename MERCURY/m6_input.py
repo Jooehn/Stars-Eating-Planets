@@ -17,7 +17,7 @@ from os import fdopen, remove
 # point objects with not mass, radius or density
         
 def big_input(names,bigdata,asteroidal=False,epoch=0):
-    
+                            
     """Function that generates the big.in input file for MERCURY6 given an Nx10
     array of data in the following format:
         
@@ -136,7 +136,7 @@ def rand_big_input(names,bigdata):
     M = np.random.uniform(0,360,size=N)
     p = np.random.uniform(0,360,size=N)
     
-    bigdata = np.insert(bigdata,3,rho,axis=1)
+    bigdata = np.insert(bigdata,2,rho,axis=1)
     bigdata = np.insert(bigdata,4,ecc,axis=1)
     bigdata = np.insert(bigdata,5,i,axis=1)
     bigdata = np.insert(bigdata,6,p,axis=1)
@@ -230,17 +230,16 @@ def calc_density(mass):
     
     rhovals = []
     for m in mass:
-        
-        #We use the TD12 mass-relation for planets more massive than super-Earths
-        #and the ZSJ16 mass-relation for rocky planets
-        if m >= (10/300)*mjtoms:
-            #Mass in Jupiter masses
-            R = 10**(0.087+0.141*np.log10(m*1e3)-0.171*np.log10(m*1e3)**2)*rjtoau 
+        #We use the TD12 mass-relation for our planets if they are above 2.62
+        #Earth masses
+        if m>=2.62*metoms:
+            R = 10**(0.087+0.141*np.log10(m/mjtoms)-0.171*np.log10(m/mjtoms)**2)*rjtoau 
+            
         else:
-            #Mass in Earth masses
-            CMF = 0.33 #Core mass fraction of Earth
+            CMF = 0.33 #Core mass fraction of the Earth
+            
             R = (1.07-0.21*CMF)*(m/metoms)**(1/3.7)*retoau
-    
+        
         V = 4*np.pi*(R*autocm)**3/3
         rho = m*mstogr/V
         rhovals.append(rho)
