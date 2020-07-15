@@ -51,10 +51,11 @@ class Scatter:
         self.dcoll = self.pdata[:,3].sum()
         self.q     = self.pdata[:,2]/M_star
         
-        if not self.cross_check():
+        crossing1 = self.cross_check()
+        crossing2 = self.get_isec()
+        if not np.all([crossing1,crossing2]):
             raise ValueError('The orbits do not cross')
         
-        self.get_isec()
         self.calc_v()
         self.calc_rhill()
         
@@ -173,15 +174,16 @@ class Scatter:
         #in between the values for which the sign change occurs.
         
         self.phic = np.zeros(2)
+        cidx = np.array([])
         
-        done = False
+        crossing = False
         if any(np.isclose(rdiff,0)):
             cidx = np.where(np.isclose(rdiff,0))[0]
             if np.size(cidx)==2:
                 self.phic[0] += ang[cidx[0]]#,ang[cidx[0]]
                 self.phic[1] += ang[cidx[1]]#,ang[cidx[1]]
-                done = True
-        elif not done:
+                crossing = True
+        elif not crossing:
             #We find the sign for each element and use np.roll to find the two points
             #where it changes
             rdsign = np.sign(rdiff)
@@ -199,23 +201,30 @@ class Scatter:
             
             if np.size(scidx)==2:
                 cidx = scidx
+                crossing = True
             elif np.size(scidx)==0:
-                raise ValueError('The orbits do not cross')
+                crossing = False
             else:
                 cidx = np.append(cidx,scidx)
+                crossing = True
         
             #We now peform a linear extrapolation 
-            k1 = (r1[cidx]-r1[cidx-1])/(ang[cidx]-ang[cidx-1])
-            m1 = r1[cidx-1]-k1*ang[cidx-1]
-            k2 = (r2[cidx]-r2[cidx-1])/(ang[cidx]-ang[cidx-1])
-            m2 = r2[cidx-1]-k2*ang[cidx-1]
-            
-            #We then have everything we need to find our crossing angles
-            self.phic = (m2-m1)/(k1-k2)
+            if crossing:
+                
+                cidx = cidx.astype(int)
+                k1 = (r1[cidx]-r1[cidx-1])/(ang[cidx]-ang[cidx-1])
+                m1 = r1[cidx-1]-k1*ang[cidx-1]
+                k2 = (r2[cidx]-r2[cidx-1])/(ang[cidx]-ang[cidx-1])
+                m2 = r2[cidx-1]-k2*ang[cidx-1]
+                
+                #We then have everything we need to find our crossing angles
+                self.phic = (m2-m1)/(k1-k2)
         
-        #We also compute and save the distance between the orbits crossings and
-        #the host star
-        self.rc = (a1*(1-e1**2))/(1+e1*np.cos(self.phic))
+                #We also compute and save the distance between the orbits crossings and
+                #the host star
+                self.rc = (a1*(1-e1**2))/(1+e1*np.cos(self.phic))
+                
+            return crossing
         
     def calc_v(self):
         """Computes the velocity vectors of the two planets in our system"""
@@ -416,7 +425,7 @@ class Scatter:
         """Finds an optimal bmax for the system at hand by requiring that the 
         the outer edges of the range of b-values should be where the change in
         eccentricity due to a scattering at the corresponding b-values should 
-        be smaller than som tolerance."""
+        be smaller than some tolerance."""
         
         a,e,m,R = self.pdata.T
         
@@ -487,9 +496,10 @@ class Scatter:
         #Monte Carlo simulation where we draw a bunch of impact parameter
         #values for an initial system with specified orbital properties
         
-        N_att = 50
+        # N_att = 50
         
         b_mc = np.random.uniform(-bmax,bmax,N)
+        cid_mc = np.random.randint(0,2,N)
         
         self.scatter(b = b_mc)
         
@@ -501,6 +511,13 @@ class Scatter:
         at2vals = self.at2
         et2vals = self.et2
         
+        #We also save the array containing info on which impact parameters
+        #that have led to planet-consumption
+        
+        scoll_mc = self.scoll
+        merger_mc = self.merger
+        eject_mc  = self.eject
+        
         #We set up a figure for which we plot the progress of the MC simulation
         
         fig, [ax0,ax1] = plt.subplots(1,2,figsize=(12,6),sharey=True)
@@ -508,7 +525,7 @@ class Scatter:
         for i in [ax0,ax1]:
             i.set_xlabel('$b\ [R_J]$')
             i.set_ylim(-0.1,1.1)
-            i.set_xlim(-bmax/self.rjtoau,bmax/self.rjtoau)
+            i.set_xlim(-5,5)
         
         ax1xticks = ax1.xaxis.get_major_ticks()
         [ax1xticks[i].label1.set_visible(False) for i in range(2)]
@@ -522,7 +539,7 @@ class Scatter:
         
         ax2.set_xlabel(r'$\tilde{a}\ [AU]$')
         ax2.set_ylabel(r'$\tilde{e}$')        
-        ax2.set_xlim(0.1,50)
+        ax2.set_xlim(1e-3,50)
         ax2.set_ylim(-0.1,1.1)
         ax2.set_xscale('log')
         self.add_ptable(ax2)
@@ -531,9 +548,14 @@ class Scatter:
         
         fig3, ax3 = plt.subplots(figsize=(10,6))
         
-        ax3.set_xlabel('$\mathrm{Number\ of\ scatterings\ to\ get\ SPC}$')
-        ax3.set_ylabel('$\mathrm{Counts}$')
-        self.add_ptable(ax3)
+        ax3.set_title('$\mathrm{Number\ of\ scatterings\ to\ get\ CME}$')
+        ax3.set_xlabel('$\mathrm{r_\mathrm{min}}$')
+        ax3.set_ylabel('$\mathrm{N_\mathrm{CE}}$')
+        ax3.set_xscale('log')
+        ax3.set_yscale('symlog')
+        ax3.set_xlim(1e-3,20)
+        ax3.set_ylim(0,1e3)
+        # self.add_ptable(ax3)
         
         #We generate different colours for all cases
         ccycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
@@ -547,35 +569,45 @@ class Scatter:
         #for our new system, we keep doing this until we get either a collision
         #or have more than N_att attempts to get one
         
-        self._mcscolls = np.zeros(N,dtype=bool)
+        #We set up containers
         
         barr  = []
-        et1arr = []
-        et2arr = []
-        at1arr = []
-        at2arr = []
-        spcet1 = []
-        spcet2 = []
-        spcat1 = []
-        spcat2 = []
         
-        self._spc_iter = []
+        rmin = np.zeros((N,2))
+        self._cme_info = np.zeros((N,7))
         
         for i in range(N):
             
-            #We set up necessary variable
+            #We set up necessary variables
             itr    = 0
+            outcome= 0
             coll   = False
             eject1 = False
             eject2 = False
             
+            #outcome is a parameter that identifies the outcome of a scattering
+            #with a number
+            #0. Consumption of planet 1
+            #1. Consumption of planet 2
+            #2. Ejection of planet 1
+            #3. Ejection of planet 2
+            #4. Planet-planet merger
+            #5. Survival
+            
+            cid = cid_mc[i]
+            scolli = scoll_mc[i,:,cid]
+            mergeri = merger_mc[i]
+            ejecti = eject_mc[i]
             bn = b_mc[i]
             dmin = dmin_mc[i]
             
-            at1i = at1vals[i,0]
-            et1i = et1vals[i,0]
-            at2i = at2vals[i,0]
-            et2i = et2vals[i,0]
+            at1i = at1vals[i,cid]
+            et1i = et1vals[i,cid]
+            at2i = at2vals[i,cid]
+            et2i = et2vals[i,cid]
+            
+            rmin[i,0] = at1i*(1-et1i)
+            rmin[i,1] = at2i*(1-et2i)
             
             #we save the old parameters
             bvals  = [bn]
@@ -586,7 +618,9 @@ class Scatter:
             mc_et2 = [et2i]
             
             #We then perform our various scatterings and detect mergers
-            while np.any(self.scoll==False) & itr<=N_att:
+            while np.all(scolli==False):# & itr<=N_att:
+                
+                itr += 1
                     
                 self.pdata[0,0] = at1i
                 self.pdata[0,1] = et1i
@@ -595,38 +629,43 @@ class Scatter:
                 
                 #We check if the new orbits cross. If they don't we break the run
                 
-                if not self.cross_check():
-                    break
+                crossing1 = self.cross_check()
                 
-                try:
-                    self.get_isec()
-                except ValueError as err:
-                    print(err.args)
+                crossing2 = self.get_isec()
+                if not np.all(np.array([crossing1,crossing2])):
+                    outcome = 5
+                    
+                if outcome!=5:
+                    #If we get a merger or an ejection we terminate as well
+                    if np.any(mergeri):
+                        coll = True
+                        outcome = 4
+                    elif np.any(ejecti[0]):
+                        eject1 = True
+                        outcome = 2
+                    elif np.any(ejecti[1]):
+                        eject2 = True
+                        outcome = 3
+                        
+                if outcome in list(range(2,6)):
+                    
+                    self._cme_info[i] += np.array([itr,outcome,bn,at1i,et1i,at2i,et2i])
                     break
-                
-                #If we get a merger or an ejection we terminate as well
-                if np.any(self.merger):
-                    coll = True
-                    break
-                elif et2i>1:
-                    eject1 = True
-                    break
-                elif et2i>1:
-                    eject2 = True
-                    break
+                    
                 self.calc_v()
                 self.calc_rhill()
                 
                 #We then carry out a new scattering
                 
-                #Uncomment to get new bmax for every scatter
+                #We compute a new bmax for every scattering
                 bmax = self.find_bmax()
                 
                 bn = np.random.uniform(-bmax,bmax)
                 
-                itr += 1
-                
-                self.scatter(b = bn)
+                self.scatter(b = np.array([bn]))
+                scolli = self.scoll[0,:,cid]
+                ejecti = self.eject[0,:,cid]
+                mergeri = self.merger[0,cid]
                 
                 #We save the old parameters
                 mc_at1.append(at1i)
@@ -638,20 +677,23 @@ class Scatter:
                 bvals.append(bn)
                 
                 #We update the orbital elements
-                at1i = self.at1[0,0]
-                et1i = self.et1[0,0]
-                at2i = self.at2[0,0]
-                et2i = self.et2[0,0]
+                at1i = self.at1[0,cid]
+                et1i = self.et1[0,cid]
+                at2i = self.at2[0,cid]
+                et2i = self.et2[0,cid]
                 
+                if (at1i*(1-et1i) < rmin[i,0]) & (at1i*(1-et1i) > self.R_s):
+                    rmin[i,0] = at1i*(1-et1i)
+                    
+                if (at2i*(1-et2i) < rmin[i,1]) & (at2i*(1-et2i) > self.R_s) :
+                    rmin[i,1] = at2i*(1-et2i)
+                    
                 #We also save the new dmin values
                 dmin = self.dmin
-                
-            if len(mc_et1)==0 or len(mc_et2)==0:
-                continue
             
-            if np.any(self.scoll) & (self.dcrit<dmin) & np.all([et1i<1,et2i<1]):
+            if np.any(scolli):
                 
-                #We also have to log the values for which we get a S-P collision
+                #We also have to log the values for which we get a consumption
                 bvals.append(bn)
                 
                 mc_at1.append(at1i)
@@ -659,26 +701,20 @@ class Scatter:
                 mc_at2.append(at2i)
                 mc_et2.append(et2i)
                 
-                #We also save the number of iterations it took to get an S-P collision
+                if np.any(scolli[0]):
+                    outcome = 0
+                if np.any(scolli[1]):
+                    outcome = 1
+                
+                #We also save all the scattering info in our main array
             
-                self._spc_iter.append(itr)
-            
-            et1arr.append(mc_et1)
-            et2arr.append(mc_et2)
-            at1arr.append(mc_at1)
-            at2arr.append(mc_at2)
+                self._cme_info[i] += np.array([itr,outcome,bn,at1i,et1i,at2i,et2i])
             
             barr.append(bvals)
                 
-            if np.any(self.scoll[0,0]) & (self.dcrit<dmin) & (mc_et1[-1]<1):
-                self._mcscolls[i] == True
-                ax0.plot(bvals[-1]/self.rjtoau,mc_et1[-1],'X',markersize=7,markerfacecolor='tab:green',\
+            if outcome == 0:
+                ax0.plot(bvals[-1]/self.rjtoau,mc_et1[-1],'*',markersize=7,markerfacecolor='tab:green',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=2)
-                
-                spcet1.append(mc_et1[-1])
-                spcet2.append(mc_et2[-1])
-                spcat1.append(mc_at1[-1])
-                spcat2.append(mc_at2[-1])
                 
                 ax2.plot(mc_at1[-2],mc_et1[-2],'o',markersize=5,markerfacecolor='blue',\
                            markeredgecolor='k',markeredgewidth=0.1,zorder=2)
@@ -688,15 +724,9 @@ class Scatter:
                 ax2.plot([mc_at1[-2],mc_at2[-2]],[mc_et1[-2],mc_et2[-2]],'-',color='tab:gray'\
                          ,alpha=0.3,zorder=1)
                 
-            elif np.any(self.scoll[0,1]) & (self.dcrit<dmin) & (mc_et2[-1]<1):
-                self._mcscolls[i] == True
-                ax1.plot(bvals[-1]/self.rjtoau,mc_et2[-1],'X',markersize=7,markerfacecolor='tab:green',\
+            elif outcome == 1:
+                ax1.plot(bvals[-1]/self.rjtoau,mc_et2[-1],'*',markersize=7,markerfacecolor='tab:green',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=2)
-                
-                spcet1.append(mc_et1[-1])
-                spcet2.append(mc_et2[-1])
-                spcat1.append(mc_at1[-1])
-                spcat2.append(mc_at2[-1])
                 
                 ax2.plot(mc_at1[-2],mc_et1[-2],'o',markersize=5,markerfacecolor='blue',\
                            markeredgecolor='k',markeredgewidth=0.1,zorder=2)
@@ -705,36 +735,57 @@ class Scatter:
                 
                 ax2.plot([mc_at1[-2],mc_at2[-2]],[mc_et1[-2],mc_et2[-2]],'-',color='tab:gray'\
                          ,alpha=0.3,zorder=1)
-                
-            elif coll:
-                ax0.plot(bvals[-1],mc_et1[-1],'X',markersize=7,markerfacecolor='tab:gray',\
+                    
+            elif outcome == 2:
+                ax0.plot(bvals[-1],mc_et1[-1],'^',markersize=7,markerfacecolor='tab:orange',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=1)
-                ax1.plot(bvals[-1],mc_et2[-1],'X',markersize=7,markerfacecolor='tab:gray',\
+            elif outcome == 3:
+                ax1.plot(bvals[-1],mc_et2[-1],'^',markersize=7,markerfacecolor='tab:orange',\
+                          markeredgecolor='k',markeredgewidth=0.5,zorder=1)
+            elif outcome == 4:
+                ax0.plot(bvals[-1],mc_et1[-1],'P',markersize=7,markerfacecolor='tab:gray',\
+                          markeredgecolor='k',markeredgewidth=0.5,zorder=1)
+                ax1.plot(bvals[-1],mc_et2[-1],'P',markersize=7,markerfacecolor='tab:gray',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=1)
 #                ax.plot(bvals[-1],mc_et2[-1],'X',markersize=7,markerfacecolor='tab:gray',\
 #                          markeredgecolor='k',markeredgewidth=0.5,zorder=2,alpha=0.5)
-            elif eject1:
-                ax0.plot(bvals[-1],mc_et1[-1],'X',markersize=7,markerfacecolor='tab:brown',\
-                          markeredgecolor='k',markeredgewidth=0.5,zorder=1)
-            elif eject2:
-                ax1.plot(bvals[-1],mc_et2[-1],'X',markersize=7,markerfacecolor='tab:brown',\
-                          markeredgecolor='k',markeredgewidth=0.5,zorder=1)
         
-        barr  = np.concatenate(barr)
-        et1arr = np.concatenate(et1arr)
-        et2arr = np.concatenate(et2arr)
+        #We set up masks for each outcome
+        spc1mask     = self._cme_info[:,1] == 0
+        spc2mask     = self._cme_info[:,1] == 1
+        ej1mask      = self._cme_info[:,1] == 2
+        ej2mask      = self._cme_info[:,1] == 3
+        mergmask     = self._cme_info[:,1] == 4
+        
+        barr  = self._cme_info[:,2][spc1mask+spc2mask]
+        et1arr = self._cme_info[:,4][spc1mask+spc2mask]
+        et2arr = self._cme_info[:,6][spc1mask+spc2mask]
         
         sns.kdeplot(barr/self.rjtoau,et1arr, cmap="Blues", shade=True, shade_lowest=True,zorder=1,\
                     ax = ax0)
         sns.kdeplot(barr/self.rjtoau,et2arr, cmap="Reds", shade=True, shade_lowest=True,zorder=1,
                     ax = ax1)
-
-        counts,binvals = np.histogram(self._spc_iter,bins = np.arange(0,N_att+1,1))
         
-        xvals = 0.5*(binvals[1:]+binvals[:-1])
-        ax3.bar(xvals,counts)
-        yint = list(range(min(counts), int(np.ceil(max(counts)))+1))
-        ax3.set_yticks(yint[::2])
+        marker = ['*','*','^','^','P']
+        masks = [spc1mask,spc2mask,ej1mask,ej2mask,mergmask]
+        
+        for i in range(len(masks)):
+            
+             # Data order: itr,outcome,bn,at1i,et1i,at2i,et2i
+            
+            if any([np.all(masks[i]==j) for j in [spc1mask,ej1mask]]):
+                aid = 3
+                eid = 4
+                plaid = 0
+                col = 'b'
+            elif any([np.all(masks[i]==j) for j in [spc2mask,ej2mask,mergmask]]):
+                aid = 5
+                eid = 6
+                plaid = 1
+                col = 'r'
+            
+            itrvals = self._cme_info[:,0][masks[i]]
+            ax3.scatter(rmin[:,plaid][masks[i]],itrvals,marker=marker[i],c=col,s=5)
         
         #We add dates to each figure
         for i in [fig,fig2,fig3]:
