@@ -48,7 +48,6 @@ class Scatter:
         self.calc_planet_radius()
         
         #This allows us to define the critical distance for planet-planet collision
-        self.dcoll = self.pdata[:,3].sum()
         self.q     = self.pdata[:,2]/M_star
         
         crossing1 = self.cross_check()
@@ -58,8 +57,7 @@ class Scatter:
         
         self.calc_v()
         self.calc_rhill()
-        
-        self.dcrit = self.dcoll
+        self.calc_dcrit()
         
     def calc_planet_radius(self):
         """Calculates the radius of a planet with a given mass using the 
@@ -81,6 +79,10 @@ class Scatter:
 
         self.pdata = np.insert(self.pdata,3,Rvals,axis=1)
         
+    def calc_dcrit(self):
+        
+        self.dcrit = self.pdata[:,3].sum()
+    
     def calc_stellar_radius(self,Z=0.02):
         """We use the analytical prescription from Tout et al. (1996) (T96) to 
         estimate the ZAMS radius of our star"""
@@ -223,6 +225,9 @@ class Scatter:
                 #We also compute and save the distance between the orbits crossings and
                 #the host star
                 self.rc = (a1*(1-e1**2))/(1+e1*np.cos(self.phic))
+                
+            if np.size(self.phic)<2:
+                crossing = False
                 
             return crossing
         
@@ -421,7 +426,7 @@ class Scatter:
         self.ecrit[:,0] = 1 - self.rcrit/self.at1
         self.ecrit[:,1] = 1 - self.rcrit/self.at2
         
-    def find_bmax(self,fac = 0.1,step=0.05):
+    def find_bmax(self,fac = 0.1,step=0.01):
         """Finds an optimal bmax for the system at hand by requiring that the 
         the outer edges of the range of b-values should be where the change in
         eccentricity due to a scattering at the corresponding b-values should 
@@ -430,7 +435,7 @@ class Scatter:
         a,e,m,R = self.pdata.T
         
         #We choose the tolerance
-        tol = 5e-2
+        tol = 1e-4
         
         #Our initial guess is 
         bmax_guess = fac*self.Rhill_mut
@@ -438,16 +443,21 @@ class Scatter:
         bvals = np.linspace(-bmax_guess,bmax_guess,1e3)
         
         self.scatter(b = bvals)
-       
-        det = np.zeros((2,len(bvals)))
-        det[0] = abs(self.et1[:,0]-e[0])
-        det[1] = abs(self.et2[:,0]-e[1])
+        
+        #We compute the gradients at the edges of the new eccentricity values
+        det111 = abs(np.gradient(self.et1[:,0])[0])>tol
+        det112 = abs(np.gradient(self.et1[:,0])[-1])>tol
+        det121 = abs(np.gradient(self.et1[:,1])[0])>tol
+        det122 = abs(np.gradient(self.et1[:,1])[-1])>tol
+        det211 = abs(np.gradient(self.et2[:,0])[0])>tol
+        det212 = abs(np.gradient(self.et2[:,0])[-1])>tol
+        det221 = abs(np.gradient(self.et2[:,1])[0])>tol
+        det222 = abs(np.gradient(self.et1[:,1])[-1])>tol
         
         #We check if the values at the edges of our b-value range has changed
         #less than some tolerance
         
-        good_range = np.all(det[0][-1:]>tol) or np.all(det[1][-1:]>tol)\
-                    or np.all(det[0][:1]>tol) or np.all(det[1][:1]>tol)
+        good_range = np.any([det111,det112,det121,det122,det211,det212,det221,det222])
                     
         #If this is true we are happy with our guess, otherwise we keep iterating
         #and adjusting the guess until we have a good guess
@@ -459,17 +469,25 @@ class Scatter:
         
             self.scatter(b = bvals)
         
-            det[0] = abs(self.et1[:,0]-e[0])
-            det[1] = abs(self.et2[:,0]-e[1])
+            det111 = abs(np.gradient(self.et1[:,0])[0])>tol
+            det112 = abs(np.gradient(self.et1[:,0])[-1])>tol
+            det121 = abs(np.gradient(self.et1[:,1])[0])>tol
+            det122 = abs(np.gradient(self.et1[:,1])[-1])>tol
+            det211 = abs(np.gradient(self.et2[:,0])[0])>tol
+            det212 = abs(np.gradient(self.et2[:,0])[-1])>tol
+            det221 = abs(np.gradient(self.et2[:,1])[0])>tol
+            det222 = abs(np.gradient(self.et1[:,1])[-1])>tol
             
-            good_range = np.all(det[0][-1:]>tol) or np.all(det[1][-1:]>tol)\
-                    or np.all(det[0][:1]>tol) or np.all(det[1][:1]>tol)
+            good_range = np.any([det111,det112,det121,det122,det211,det212,det221,det222])
+            
+            if fac >= 1:
+                break
         
         self.bmax = bmax_guess
         
         return bmax_guess
         
-    def collfinder(self,N):
+    def collfinder(self,N,disp=True,col1='b',col2='r',pmass=False):
         """Carries out Monte Carlo simulations of subsequent scattering events
         between two planets in a pre-defined planetary system. We draw one value
         from a uniform distribution of impact parameters and then scatter the 
@@ -478,11 +496,18 @@ class Scatter:
             2. One of the planets is ejected
             3. One of the planets collides with the host star
             4. The two planets undergo a merger
+            5. We have had more than 1e3 scatterings
         
             N: The number of simulations we want to perform"""
         
         #We extract the initial params
         a,e,m,R = self.pdata.T
+        
+        #We can choose to use point masses
+        if pmass:
+            R = np.array([0,0])
+            self.pdata[:,3] = R
+            self.calc_dcrit()
         
         #We want to find a range of b which would be suitable for our needs
         #This should be given by the point where change in eccentricity
@@ -496,15 +521,15 @@ class Scatter:
         #Monte Carlo simulation where we draw a bunch of impact parameter
         #values for an initial system with specified orbital properties
         
-        # N_att = 50
+        N_att = 1e4
         
         b_mc = np.random.uniform(-bmax,bmax,N)
         cid_mc = np.random.randint(0,2,N)
         
         self.scatter(b = b_mc)
-        
         #We save the dmin values
         dmin_mc = self.dmin
+        vinf_mc = np.sqrt(self.vrel[:,0]**2+self.vrel[:,1]**2)
         
         at1vals = self.at1
         et1vals = self.et1
@@ -519,52 +544,63 @@ class Scatter:
         eject_mc  = self.eject
         
         #We set up a figure for which we plot the progress of the MC simulation
-        
-        fig, [ax0,ax1] = plt.subplots(1,2,figsize=(12,6),sharey=True)
-        
-        for i in [ax0,ax1]:
-            i.set_xlabel('$b\ [R_J]$')
-            i.set_ylim(-0.1,1.1)
-            i.set_xlim(-5,5)
-        
-        ax1xticks = ax1.xaxis.get_major_ticks()
-        [ax1xticks[i].label1.set_visible(False) for i in range(2)]
-        ax0.set_ylabel(r'$\tilde{e}$')        
-        fig.subplots_adjust(wspace = 0)
-        
-        self.add_ptable(ax0)
-#        ax.set_xlim(-bmax/self.rjtoau,bmax/self.rjtoau)
-        #We set up a second figure to visualise the systems where we get scatterings
-        fig2, ax2 = plt.subplots(figsize=(10,6))
-        
-        ax2.set_xlabel(r'$\tilde{a}\ [AU]$')
-        ax2.set_ylabel(r'$\tilde{e}$')        
-        ax2.set_xlim(1e-3,50)
-        ax2.set_ylim(-0.1,1.1)
-        ax2.set_xscale('log')
-        self.add_ptable(ax2)
-        
-        ax2.axvline(self.rcrit,linestyle='--',color='tab:grey',alpha=0.5)
-        
-        fig3, ax3 = plt.subplots(figsize=(10,6))
-        
-        ax3.set_title('$\mathrm{Number\ of\ scatterings\ to\ get\ CME}$')
-        ax3.set_xlabel('$\mathrm{r_\mathrm{min}}$')
-        ax3.set_ylabel('$\mathrm{N_\mathrm{CE}}$')
-        ax3.set_xscale('log')
-        ax3.set_yscale('symlog')
-        ax3.set_xlim(1e-3,20)
-        ax3.set_ylim(0,1e3)
-        # self.add_ptable(ax3)
-        
-        #We generate different colours for all cases
-        ccycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
-        if N > len(ccycle):
-            ncycle = int(np.ceil(N/len(ccycle)))
-            ccycle = np.concatenate([ccycle]*ncycle)
+        if self._mc_axes is None:
+            fig, [ax0,ax1] = plt.subplots(1,2,figsize=(12,6),sharey=True)
+            
+            for i in [ax0,ax1]:
+                i.set_xlabel('$b\ [R_J]$')
+                i.set_ylim(-0.1,1.1)
+                i.set_xlim(-5,5)
+            
+            ax1xticks = ax1.xaxis.get_major_ticks()
+            [ax1xticks[i].label1.set_visible(False) for i in range(2)]
+            ax0.set_ylabel(r'$\tilde{e}$')        
+            fig.subplots_adjust(wspace = 0)
+            
+            #We set up a second figure to visualise the systems where we get scatterings
+            fig2, ax2 = plt.subplots(figsize=(10,6))
+            
+            ax2.set_xlabel(r'$\tilde{a}\ [AU]$')
+            ax2.set_ylabel(r'$\tilde{e}$')        
+            ax2.set_xlim(1e-3,50)
+            ax2.set_ylim(-0.1,1.1)
+            ax2.set_xscale('log')
+            
+            ax2.axvline(self.rcrit,linestyle='--',color='tab:grey',alpha=0.5)
+            
+            fig3, ax3 = plt.subplots()
+            
+            ax3.set_title('$\mathrm{Number\ of\ scatterings\ to\ get\ CME}$')
+            ax3.set_xlabel('$\mathrm{r_\mathrm{min}}$')
+            ax3.set_ylabel('$\mathrm{N_\mathrm{CE}}$')
+            ax3.set_xscale('log')
+            ax3.set_yscale('symlog')
+            ax3.set_xlim(1e-3,20)
+            ax3.set_ylim(0,1.2e4)
+            
+            ax3.axvline(self.R_s*self.rstoau,linestyle='dashed',color='k')
+            
+            fig4, ax4 = plt.subplots()
+            
+            ax4.set_title('$\mathrm{Final\ eccentricities\ before\ CME}$')
+            ax4.set_xlabel('$e_\mathrm{CME}$')
+            ax4.set_ylabel('$e_\mathrm{surv}$')
+            ax4.set_xlim(-0.01,1.01)
+            ax4.set_ylim(-0.01,1.01)
+            
+            fig5, ax5 = plt.subplots()
+            
+            ax5.set_title('$\mathrm{Minimum separation before CME}$')
+            ax5.set_xlabel('$d_\mathrm{min}\ [\mathrm{AU}]$')
+            ax5.set_ylabel('$v_\infty\ [\mathrm{km\ s}^{-1}]$')
+            ax5.set_xscale('symlog',linthreshx = 1e-4)
+            ax5.set_xlim(-1e-5,1e3)
+            ax5.set_ylim(0,40)
+            
+            self._mc_figs = [fig,fig2,fig3,fig4,fig5]
         else:
-            ccycle = ccycle[:N]
-        
+            ax0, ax1, ax2, ax3, ax4, ax5 = self._mc_axes
+            fig, fig2, fig3, fig4, fig5 = self._mc_figs
         #We loop through all scatter scenarios and use the new orbital params
         #for our new system, we keep doing this until we get either a collision
         #or have more than N_att attempts to get one
@@ -578,9 +614,12 @@ class Scatter:
         
         for i in range(N):
             
+            if disp:
+                print('Currently on system: ',i)
+            
             #We set up necessary variables
             itr    = 0
-            outcome= 0
+            outcome= 6 #The original outcome is unresolved
             coll   = False
             eject1 = False
             eject2 = False
@@ -592,14 +631,17 @@ class Scatter:
             #2. Ejection of planet 1
             #3. Ejection of planet 2
             #4. Planet-planet merger
-            #5. Survival
+            #5. Survival by not crossing
+            #6. Survival by being unresolved, i.e. itr >= N_att
             
+            #We save the parameters for the current simulation in new containers
             cid = cid_mc[i]
             scolli = scoll_mc[i,:,cid]
             mergeri = merger_mc[i]
             ejecti = eject_mc[i]
             bn = b_mc[i]
-            dmin = dmin_mc[i]
+            dmin = dmin_mc[i,cid]
+            vinf = vinf_mc[cid]
             
             at1i = at1vals[i,cid]
             et1i = et1vals[i,cid]
@@ -617,8 +659,11 @@ class Scatter:
             mc_at2 = [at2i]
             mc_et2 = [et2i]
             
+            mc_dmin = [dmin]
+            mc_vinf = [vinf]
+            
             #We then perform our various scatterings and detect mergers
-            while np.all(scolli==False):# & itr<=N_att:
+            while np.all(scolli==False):
                 
                 itr += 1
                     
@@ -649,7 +694,7 @@ class Scatter:
                         
                 if outcome in list(range(2,6)):
                     
-                    self._cme_info[i] += np.array([itr,outcome,bn,at1i,et1i,at2i,et2i])
+                    self._cme_info[i] = np.array([itr,outcome,bn,at1i,et1i,at2i,et2i])
                     break
                     
                 self.calc_v()
@@ -676,20 +721,30 @@ class Scatter:
                 #We also save the impact parameter
                 bvals.append(bn)
                 
+                #...and the velocity at infinity
+                vinf = np.sqrt(self.vrel[cid,0]**2+self.vrel[cid,1]**2)
+                mc_vinf.append(vinf)
+                
+                #..and the dmin values
+                mc_dmin.append(self.dmin[0,cid])
+                
                 #We update the orbital elements
                 at1i = self.at1[0,cid]
                 et1i = self.et1[0,cid]
                 at2i = self.at2[0,cid]
                 et2i = self.et2[0,cid]
                 
+                #We also update rmin if its smaller than before
                 if (at1i*(1-et1i) < rmin[i,0]) & (at1i*(1-et1i) > self.R_s):
                     rmin[i,0] = at1i*(1-et1i)
                     
                 if (at2i*(1-et2i) < rmin[i,1]) & (at2i*(1-et2i) > self.R_s) :
                     rmin[i,1] = at2i*(1-et2i)
-                    
-                #We also save the new dmin values
-                dmin = self.dmin
+                
+                #If we have had too many iterations, the system is unresolved
+                if itr>=N_att and not np.any(scolli):
+                    self._cme_info[i] = np.array([itr+1,outcome,bn,at1i,et1i,at2i,et2i])
+                    break
             
             if np.any(scolli):
                 
@@ -703,93 +758,104 @@ class Scatter:
                 
                 if np.any(scolli[0]):
                     outcome = 0
-                if np.any(scolli[1]):
+                elif np.any(scolli[1]):
                     outcome = 1
                 
                 #We also save all the scattering info in our main array
-            
-                self._cme_info[i] += np.array([itr,outcome,bn,at1i,et1i,at2i,et2i])
-            
+                self._cme_info[i] = np.array([itr+1,outcome,bn,at1i,et1i,at2i,et2i])
             barr.append(bvals)
-                
+            
+            #############################################################
+            ########################## Plotting #########################
+            #############################################################
+            
+            #We want to plot the information from the final encounter that makes
+            #the planet end up on a CME orbit
+            if self._cme_info[i,0] < 2:
+                fceid = -1
+            else:
+                fceid = -2
+            
+            #We use different markers for each outcome of interest
             if outcome == 0:
                 ax0.plot(bvals[-1]/self.rjtoau,mc_et1[-1],'*',markersize=7,markerfacecolor='tab:green',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=2)
                 
-                ax2.plot(mc_at1[-2],mc_et1[-2],'o',markersize=5,markerfacecolor='blue',\
+                ax2.plot(mc_at1[fceid],mc_et1[fceid],'o',markersize=5,markerfacecolor=col1,\
                            markeredgecolor='k',markeredgewidth=0.1,zorder=2)
-                ax2.plot(mc_at2[-2],mc_et2[-2],'o',markersize=5,markerfacecolor='red',\
+                ax2.plot(mc_at2[fceid],mc_et2[fceid],'o',markersize=5,markerfacecolor=col2,\
                            markeredgecolor='k',markeredgewidth=0.1,zorder=2)
                 
-                ax2.plot([mc_at1[-2],mc_at2[-2]],[mc_et1[-2],mc_et2[-2]],'-',color='tab:gray'\
+                ax2.plot([mc_at1[fceid],mc_at2[fceid]],[mc_et1[fceid],mc_et2[fceid]],'-',color='tab:gray'\
                          ,alpha=0.3,zorder=1)
-                
+                    
+                ax3.plot(rmin[i,0],self._cme_info[i,0],'*',markersize=7,markerfacecolor=col1,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
+                    
+                ax4.plot(mc_et1[fceid],mc_et2[fceid],'*',markersize=7,markerfacecolor=col1,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
+                    
+                ax5.plot(mc_dmin[fceid],mc_vinf[fceid]*self.auyrtokms,'*',markersize=7,markerfacecolor=col1,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
             elif outcome == 1:
                 ax1.plot(bvals[-1]/self.rjtoau,mc_et2[-1],'*',markersize=7,markerfacecolor='tab:green',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=2)
                 
-                ax2.plot(mc_at1[-2],mc_et1[-2],'o',markersize=5,markerfacecolor='blue',\
+                ax2.plot(mc_at1[fceid],mc_et1[fceid],'o',markersize=5,markerfacecolor=col1,\
                            markeredgecolor='k',markeredgewidth=0.1,zorder=2)
-                ax2.plot(mc_at2[-2],mc_et2[-2],'o',markersize=5,markerfacecolor='red',\
+                ax2.plot(mc_at2[fceid],mc_et2[fceid],'o',markersize=5,markerfacecolor=col2,\
                            markeredgecolor='k',markeredgewidth=0.1,zorder=2)
                 
-                ax2.plot([mc_at1[-2],mc_at2[-2]],[mc_et1[-2],mc_et2[-2]],'-',color='tab:gray'\
+                ax2.plot([mc_at1[fceid],mc_at2[fceid]],[mc_et1[fceid],mc_et2[fceid]],'-',color='tab:gray'\
                          ,alpha=0.3,zorder=1)
+                
+                ax3.plot(rmin[i,1],self._cme_info[i,0],'*',markersize=7,markerfacecolor=col2,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
                     
+                ax4.plot(mc_et2[fceid],mc_et1[fceid],'*',markersize=7,markerfacecolor=col2,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
+                    
+                ax5.plot(mc_dmin[fceid],mc_vinf[fceid]*self.auyrtokms,'*',markersize=7,markerfacecolor=col2,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
             elif outcome == 2:
                 ax0.plot(bvals[-1],mc_et1[-1],'^',markersize=7,markerfacecolor='tab:orange',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=1)
-            elif outcome == 3:
+                    
+                ax3.plot(rmin[i,0],self._cme_info[i,0],'^',markersize=7,markerfacecolor=col1,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
+                    
+                ax4.plot(mc_et1[fceid],mc_et2[fceid],'^',markersize=7,markerfacecolor=col1,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
+                    
+                ax5.plot(mc_dmin[fceid],mc_vinf[fceid]*self.auyrtokms,'^',markersize=7,markerfacecolor=col1,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
+            elif outcome == 3:                
                 ax1.plot(bvals[-1],mc_et2[-1],'^',markersize=7,markerfacecolor='tab:orange',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=1)
+                
+                ax3.plot(rmin[i,1],self._cme_info[i,0],'^',markersize=7,markerfacecolor=col2,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
+                
+                ax4.plot(mc_et2[fceid],mc_et1[fceid],'^',markersize=7,markerfacecolor=col2,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
+                
+                ax5.plot(mc_dmin[fceid],mc_vinf[fceid]*self.auyrtokms,'^',markersize=7,markerfacecolor=col2,\
+                           markeredgecolor='none',markeredgewidth=0.1,zorder=2)
             elif outcome == 4:
                 ax0.plot(bvals[-1],mc_et1[-1],'P',markersize=7,markerfacecolor='tab:gray',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=1)
                 ax1.plot(bvals[-1],mc_et2[-1],'P',markersize=7,markerfacecolor='tab:gray',\
                           markeredgecolor='k',markeredgewidth=0.5,zorder=1)
-#                ax.plot(bvals[-1],mc_et2[-1],'X',markersize=7,markerfacecolor='tab:gray',\
-#                          markeredgecolor='k',markeredgewidth=0.5,zorder=2,alpha=0.5)
+                ax3.plot(rmin[i,0],self._cme_info[i,0],'P',markersize=7,markerfacecolor=col1,\
+                           markeredgecolor=col2,markeredgewidth=0.7,zorder=1)
+                
+                ax4.plot(mc_et1[fceid],mc_et2[fceid],'P',markersize=7,markerfacecolor=col1,\
+                           markeredgecolor=col2,markeredgewidth=0.7,zorder=2)
+                
+                ax5.plot(mc_dmin[fceid],mc_vinf[fceid]*self.auyrtokms,'P',markersize=7,markerfacecolor=col1,\
+                           markeredgecolor=col2,markeredgewidth=0.7,zorder=2)
         
-        #We set up masks for each outcome
-        spc1mask     = self._cme_info[:,1] == 0
-        spc2mask     = self._cme_info[:,1] == 1
-        ej1mask      = self._cme_info[:,1] == 2
-        ej2mask      = self._cme_info[:,1] == 3
-        mergmask     = self._cme_info[:,1] == 4
-        
-        barr  = self._cme_info[:,2][spc1mask+spc2mask]
-        et1arr = self._cme_info[:,4][spc1mask+spc2mask]
-        et2arr = self._cme_info[:,6][spc1mask+spc2mask]
-        
-        sns.kdeplot(barr/self.rjtoau,et1arr, cmap="Blues", shade=True, shade_lowest=True,zorder=1,\
-                    ax = ax0)
-        sns.kdeplot(barr/self.rjtoau,et2arr, cmap="Reds", shade=True, shade_lowest=True,zorder=1,
-                    ax = ax1)
-        
-        marker = ['*','*','^','^','P']
-        masks = [spc1mask,spc2mask,ej1mask,ej2mask,mergmask]
-        
-        for i in range(len(masks)):
-            
-             # Data order: itr,outcome,bn,at1i,et1i,at2i,et2i
-            
-            if any([np.all(masks[i]==j) for j in [spc1mask,ej1mask]]):
-                aid = 3
-                eid = 4
-                plaid = 0
-                col = 'b'
-            elif any([np.all(masks[i]==j) for j in [spc2mask,ej2mask,mergmask]]):
-                aid = 5
-                eid = 6
-                plaid = 1
-                col = 'r'
-            
-            itrvals = self._cme_info[:,0][masks[i]]
-            ax3.scatter(rmin[:,plaid][masks[i]],itrvals,marker=marker[i],c=col,s=5)
-        
-        #We add dates to each figure
-        for i in [fig,fig2,fig3]:
-            add_date(i,0.9075)
+        self._mc_axes = [ax0,ax1,ax2,ax3,ax4,ax5]
         
     def test_bvals(self):
         """Solves the Kepler problem for two orbits, given a varying set of
