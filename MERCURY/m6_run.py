@@ -278,7 +278,7 @@ for j in bad_ext:
 #We send an email to indicate that the run is finished
     
 email = 'nat15jwi@student.lu.se'
-yag = yagmail.SMTP(email,'D3f3nd1m3px4')
+yag = yagmail.SMTP(email,'********')
 yag.send(email,'MERCURY Run','The run is now finished')
 
 print('My work here is done')
