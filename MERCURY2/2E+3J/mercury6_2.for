@@ -862,7 +862,7 @@ c
 c Author: John E. Chambers
 c
 c Checks all objects with index I >= I0, to see if they have had a collision
-c with the central body in a time interval H, when given the initial and 
+c with the central body in a time interval H, when given the initial and
 c final coordinates and velocities. The routine uses cubic interpolation
 c to estimate the minimum separations.
 c
@@ -935,13 +935,18 @@ c If inside the central body, or passing through pericentre, use 2-body approx.
           e = sqrt( max(temp,0.d0) )
           q = p / (1.d0 + e)
 c
+c ajm 2012-05-28 edited this to check that collision occurs
+c within the timestep
+c
+c ajm secundum andrew shannon 2014-08-28 added abs() to
+c catch some leakers
+c 
+c dcarrera, ajm 2015-02-02 fixed an error in the calculation
+c of uhit, u0, mhit, m0 for hyperbolic orbits.
+c 
 c If the object hit the central body
           if (q.le.rcen) then
-            nhit = nhit + 1
-            jhit(nhit) = j
-            dhit(nhit) = rcen
-c
-c Time of impact relative to the end of the timestep
+c     Time of impact relative to the end of the timestep
             if (e.lt.1) then
               a = q / (1.d0 - e)
               uhit = sign (acos((1.d0 - rcen/a)/e), -h)
@@ -950,14 +955,20 @@ c Time of impact relative to the end of the timestep
               m0   = mod (u0   - e*sin(u0)   + PI, TWOPI) - PI
             else
               a = q / (e - 1.d0)
-              uhit = sign (mco_acsh((1.d0 - rcen/a)/e), -h)
-              u0   = sign (mco_acsh((1.d0 - r0/a  )/e), rv0)
-              mhit = mod (uhit - e*sinh(uhit) + PI, TWOPI) - PI
-              m0   = mod (u0   - e*sinh(u0)   + PI, TWOPI) - PI
+              uhit = sign (mco_acsh((1.d0 + rcen/a)/e), -h)
+              u0   = sign (mco_acsh((1.d0 + r0/a  )/e), rv0)
+              mhit = e*sinh(uhit) - uhit
+              m0   = e*sinh(u0)   - u0
             end if
             mm = sqrt((mcen + m(j)) / (a*a*a))
-            thit(nhit) = (mhit - m0) / mm + time
-          end if
+            if (abs((mhit-m0)/mm).le.abs(h)) then
+               nhit = nhit + 1
+               jhit(nhit) = j
+               dhit(nhit) = rcen
+               thit(nhit) = (mhit - m0) / mm + time
+            endif
+         end if
+c ajm end edit
         end if
       end do
 c
